@@ -19,6 +19,7 @@ class Story(models.Model):
     duration = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True) # in seconds for video
     view_count = models.IntegerField(default=0)
     expires_at = models.DateTimeField(blank=True)
+    is_expired = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

@@ -197,4 +197,16 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+CELERY_BEAT_SCHEDULE = {
+    'recalculate-trending-hashtags-every-15-min': {
+        'task': 'hashtags.tasks.recalculate_trending_hashtags',
+        'schedule': 900.0,
+    },
+    'mark-and-cleanup-expired-stories-hourly': {
+        'task': 'stories.tasks.mark_and_cleanup_expired_stories',
+        'schedule': 3600.0,
+    },
+}
+
+
 
