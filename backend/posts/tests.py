@@ -221,3 +221,111 @@ class PostsAPITests(TestCase):
         self.assertEqual(res.data["content"], "Private post")
 
 
+from unittest.mock import patch
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+class PostMediaUploadTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="uploader",
+            email="uploader@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+    @patch('cloudinary.uploader.upload')
+    def test_single_image_upload_success(self, mock_upload):
+        # Setup mock return value
+        mock_upload.return_value = {
+            "secure_url": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+            "public_id": "sample_image_id",
+            "resource_type": "image"
+        }
+
+        # Create a small valid mock image file
+        image_file = SimpleUploadedFile(
+            "test_image.png",
+            b"fake_image_binary_data",
+            content_type="image/png"
+        )
+
+        res = self.client.post(
+            "/api/v1/posts/upload-media/",
+            {"files": [image_file]},
+            format="multipart"
+        )
+
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["media_url"], "https://res.cloudinary.com/demo/image/upload/sample.jpg")
+        self.assertEqual(res.data[0]["media_type"], "image")
+        self.assertEqual(res.data[0]["public_id"], "sample_image_id")
+        self.assertIsNone(res.data[0]["thumbnail_url"])
+
+    @patch('cloudinary.uploader.upload')
+    def test_multiple_media_and_video_upload_success(self, mock_upload):
+        # Configure side effect for multiple uploads (1 image, 1 video)
+        mock_upload.side_effect = [
+            {
+                "secure_url": "https://res.cloudinary.com/demo/image/upload/sample2.jpg",
+                "public_id": "sample_image_id_2",
+                "resource_type": "image"
+            },
+            {
+                "secure_url": "https://res.cloudinary.com/demo/video/upload/sample_video.mp4",
+                "public_id": "sample_video_id",
+                "resource_type": "video"
+            }
+        ]
+
+        image_file = SimpleUploadedFile("pic.jpg", b"imagebytes", content_type="image/jpeg")
+        video_file = SimpleUploadedFile("movie.mp4", b"videobytes", content_type="video/mp4")
+
+        res = self.client.post(
+            "/api/v1/posts/upload-media/",
+            {"files": [image_file, video_file]},
+            format="multipart"
+        )
+
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(len(res.data), 2)
+        
+        # Verify first item (image)
+        self.assertEqual(res.data[0]["media_type"], "image")
+        self.assertEqual(res.data[0]["public_id"], "sample_image_id_2")
+
+        # Verify second item (video with auto-generated thumbnail)
+        self.assertEqual(res.data[1]["media_type"], "video")
+        self.assertEqual(res.data[1]["public_id"], "sample_video_id")
+        self.assertIsNotNone(res.data[1]["thumbnail_url"])
+        self.assertIn("sample_video_id.jpg", res.data[1]["thumbnail_url"])
+
+    def test_image_size_limit_exceeded(self):
+        # Create a mock image file that exceeds 10MB limit (e.g. 11MB)
+        large_bytes = b"0" * (11 * 1024 * 1024)
+        large_file = SimpleUploadedFile("huge.png", large_bytes, content_type="image/png")
+
+        res = self.client.post(
+            "/api/v1/posts/upload-media/",
+            {"files": [large_file]},
+            format="multipart"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("size exceeds", res.data["error"])
+
+    def test_unsupported_file_format(self):
+        # Create a mock text file
+        text_file = SimpleUploadedFile("doc.txt", b"plain text", content_type="text/plain")
+
+        res = self.client.post(
+            "/api/v1/posts/upload-media/",
+            {"files": [text_file]},
+            format="multipart"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Unsupported file type", res.data["error"])
+
+
+

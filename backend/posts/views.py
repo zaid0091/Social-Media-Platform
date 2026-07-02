@@ -118,3 +118,63 @@ class UserPostListView(APIView):
         serializer = PostSerializer(result_page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
 
+
+from rest_framework.parsers import MultiPartParser, FormParser
+from core.utils.cloudinary import upload_file_to_cloudinary
+
+class PostMediaUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, *args, **kwargs):
+        files = request.FILES.getlist('files') or request.FILES.getlist('media')
+        if not files:
+            return Response({"error": "No files provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed_image_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        allowed_video_types = ['video/mp4', 'video/quicktime', 'video/mov', 'video/x-matroska', 'video/webm']
+        
+        MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10MB
+        MAX_VIDEO_SIZE = 100 * 1024 * 1024 # 100MB
+
+        uploaded_results = []
+
+        for f in files:
+            content_type = f.content_type
+            size = f.size
+
+            if content_type in allowed_image_types:
+                if size > MAX_IMAGE_SIZE:
+                    return Response({"error": f"Image size exceeds the 10MB limit: {f.name}"}, status=status.HTTP_400_BAD_REQUEST)
+                resource_type = 'image'
+            elif content_type in allowed_video_types:
+                if size > MAX_VIDEO_SIZE:
+                    return Response({"error": f"Video size exceeds the 100MB limit: {f.name}"}, status=status.HTTP_400_BAD_REQUEST)
+                resource_type = 'video'
+            else:
+                ext = f.name.split('.')[-1].lower() if f.name else ''
+                if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
+                    if size > MAX_IMAGE_SIZE:
+                        return Response({"error": f"Image size exceeds the 10MB limit: {f.name}"}, status=status.HTTP_400_BAD_REQUEST)
+                    resource_type = 'image'
+                elif ext in ['mp4', 'mov', 'avi', 'mkv', 'webm']:
+                    if size > MAX_VIDEO_SIZE:
+                        return Response({"error": f"Video size exceeds the 100MB limit: {f.name}"}, status=status.HTTP_400_BAD_REQUEST)
+                    resource_type = 'video'
+                else:
+                    return Response({"error": f"Unsupported file type: {f.name}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                result = upload_file_to_cloudinary(f, resource_type=resource_type)
+                uploaded_results.append({
+                    'media_url': result['secure_url'],
+                    'media_type': result['resource_type'],
+                    'public_id': result['public_id'],
+                    'thumbnail_url': result['thumbnail_url']
+                })
+            except Exception as e:
+                return Response({"error": f"Upload failed for {f.name}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(uploaded_results, status=status.HTTP_201_CREATED)
+
+
