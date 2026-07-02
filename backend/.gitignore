@@ -1,0 +1,28 @@
+# Python/Django gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+venv/
+ENV/
+env/
+.env
+.env.local
+.env.*.local
+
+# Databases
+*.sqlite3
+
+# Media and static files
+/media/
+/staticfiles/
+
+# OS/IDE metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.bak
+*.log

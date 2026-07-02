@@ -1,0 +1,14 @@
+# Workspace Level gitignore
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Ignore env files at root
+.env
+.env.*
+
+# Backup files
+*.bak
+*.swp
+*.log
