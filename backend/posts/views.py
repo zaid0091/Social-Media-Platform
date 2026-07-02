@@ -178,3 +178,189 @@ class PostMediaUploadView(APIView):
         return Response(uploaded_results, status=status.HTTP_201_CREATED)
 
 
+from django.contrib.contenttypes.models import ContentType
+from rest_framework.throttling import ScopedRateThrottle
+from .models import Like, Bookmark, Comment
+
+class LikeView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'likes'
+
+    def post(self, request, object_id, *args, **kwargs):
+        target_type = request.data.get('type') or request.query_params.get('type') or 'post'
+        target_type = target_type.lower()
+
+        if target_type == 'post':
+            try:
+                target_obj = Post.objects.get(id=object_id, is_deleted=False)
+            except Post.DoesNotExist:
+                return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+            model_class = Post
+        elif target_type == 'comment':
+            try:
+                target_obj = Comment.objects.get(id=object_id, is_deleted=False)
+            except Comment.DoesNotExist:
+                return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+            model_class = Comment
+        else:
+            return Response({"error": "Invalid type parameter. Use 'post' or 'comment'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_obj.author) |
+            Q(blocker=target_obj.author, blocked=request.user)
+        ).exists():
+            return Response({"error": f"{target_type.capitalize()} not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        content_type = ContentType.objects.get_for_model(model_class)
+        like_filter = Like.objects.filter(
+            user=request.user,
+            content_type=content_type,
+            object_id=object_id
+        )
+
+        if like_filter.exists():
+            like_filter.delete()
+            liked = False
+        else:
+            Like.objects.create(
+                user=request.user,
+                content_type=content_type,
+                object_id=object_id
+            )
+            liked = True
+
+        target_obj.refresh_from_db()
+        return Response({
+            "liked": liked,
+            "like_count": target_obj.like_count
+        }, status=status.HTTP_200_OK)
+
+class CommentLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'likes'
+
+    def post(self, request, comment_id, *args, **kwargs):
+        try:
+            target_obj = Comment.objects.get(id=comment_id, is_deleted=False)
+        except Comment.DoesNotExist:
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_obj.author) |
+            Q(blocker=target_obj.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        content_type = ContentType.objects.get_for_model(Comment)
+        like_filter = Like.objects.filter(
+            user=request.user,
+            content_type=content_type,
+            object_id=comment_id
+        )
+
+        if like_filter.exists():
+            like_filter.delete()
+            liked = False
+        else:
+            Like.objects.create(
+                user=request.user,
+                content_type=content_type,
+                object_id=comment_id
+            )
+            liked = True
+
+        target_obj.refresh_from_db()
+        return Response({
+            "liked": liked,
+            "like_count": target_obj.like_count
+        }, status=status.HTTP_200_OK)
+
+class BookmarkView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id, *args, **kwargs):
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=post.author) |
+            Q(blocker=post.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        bookmark_filter = Bookmark.objects.filter(user=request.user, post=post)
+        if bookmark_filter.exists():
+            bookmark_filter.delete()
+            bookmarked = False
+        else:
+            Bookmark.objects.create(user=request.user, post=post)
+            bookmarked = True
+
+        return Response({
+            "bookmarked": bookmarked
+        }, status=status.HTTP_200_OK)
+
+class BookmarkListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        bookmarked_post_ids = Bookmark.objects.filter(user=request.user).values_list('post_id', flat=True)
+        blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        all_blocked = set(list(blocked_users) + list(blockers))
+
+        posts = Post.objects.filter(
+            id__in=bookmarked_post_ids,
+            is_deleted=False
+        ).exclude(author_id__in=all_blocked).order_by('-created_at')
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        result_page = paginator.paginate_queryset(posts, request)
+        serializer = PostSerializer(result_page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+class PostLikerListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, post_id, *args, **kwargs):
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=post.author) |
+            Q(blocker=post.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        post_ct = ContentType.objects.get_for_model(Post)
+        liker_ids = Like.objects.filter(
+            content_type=post_ct,
+            object_id=post_id
+        ).values_list('user_id', flat=True)
+
+        blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        all_blocked = set(list(blocked_users) + list(blockers))
+
+        users = User.objects.filter(id__in=liker_ids, is_active=True).exclude(id__in=all_blocked).order_by('username')
+        
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        result_page = paginator.paginate_queryset(users, request)
+        from accounts.serializers import UserFollowDetailsSerializer
+        serializer = UserFollowDetailsSerializer(result_page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+
+

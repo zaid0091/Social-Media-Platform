@@ -17,6 +17,9 @@ CACHES = {
         "LOCATION": env.str("REDIS_URL"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "REDIS_CLIENT_KWARGS": {
+                "protocol": 2,
+            }
         }
     }
 }

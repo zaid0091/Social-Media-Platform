@@ -13,9 +13,12 @@ CORS_ALLOW_CREDENTIALS = True
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": env.str("REDIS_URL", "redis://localhost:6379/0"),
+        "LOCATION": env.str("REDIS_URL", "redis://localhost:6379/0?protocol=2"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "REDIS_CLIENT_KWARGS": {
+                "protocol": 2,
+            }
         }
     }
 }

@@ -328,4 +328,126 @@ class PostMediaUploadTests(TestCase):
         self.assertIn("Unsupported file type", res.data["error"])
 
 
+class PostLikesAndBookmarksAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="liker",
+            email="liker@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.post_author = User.objects.create_user(
+            username="author",
+            email="author@example.com",
+            password="Password123!",
+            is_active=True
+        )
+
+        self.post = Post.objects.create(
+            author=self.post_author,
+            content="This post will be liked #test",
+            post_type="text"
+        )
+
+        self.comment = Comment.objects.create(
+            post=self.post,
+            author=self.post_author,
+            content="This is a comment to like"
+        )
+
+    def test_toggle_like_post_and_signals(self):
+        # Like the post
+        res = self.client.post(f"/api/v1/posts/like/{self.post.id}/", {"type": "post"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["liked"])
+        self.assertEqual(res.data["like_count"], 1)
+
+        # Check Post's cache like count
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.like_count, 1)
+
+        # Unlike the post
+        res = self.client.post(f"/api/v1/posts/like/{self.post.id}/", {"type": "post"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["liked"])
+        self.assertEqual(res.data["like_count"], 0)
+
+        # Check Post's cache like count
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.like_count, 0)
+
+    def test_toggle_like_comment_and_signals(self):
+        # Like the comment via CommentLikeView
+        res = self.client.post(f"/api/v1/posts/comment-like/{self.comment.id}/", format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["liked"])
+        self.assertEqual(res.data["like_count"], 1)
+
+        # Check Comment's cache like count
+        self.comment.refresh_from_db()
+        self.assertEqual(self.comment.like_count, 1)
+
+        # Like the comment via LikeView with type parameter
+        res = self.client.post(f"/api/v1/posts/like/{self.comment.id}/", {"type": "comment"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["liked"])
+        self.assertEqual(res.data["like_count"], 0)
+
+        # Check Comment's cache like count
+        self.comment.refresh_from_db()
+        self.assertEqual(self.comment.like_count, 0)
+
+    def test_toggle_bookmark_and_list(self):
+        # Bookmark post
+        res = self.client.post(f"/api/v1/posts/bookmark/{self.post.id}/", format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["bookmarked"])
+
+        # Check cache bookmark_count on Post
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.bookmark_count, 1)
+
+        # Retrieve bookmarks list
+        res = self.client.get("/api/v1/posts/bookmarks/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)
+        self.assertEqual(res.data["results"][0]["id"], str(self.post.id))
+
+        # Unbookmark post
+        res = self.client.post(f"/api/v1/posts/bookmark/{self.post.id}/", format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["bookmarked"])
+
+        # Check cache bookmark_count on Post
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.bookmark_count, 0)
+
+    def test_post_likers_list(self):
+        # Like the post
+        Like.objects.create(
+            user=self.user,
+            content_type=ContentType.objects.get_for_model(Post),
+            object_id=self.post.id
+        )
+
+        res = self.client.get(f"/api/v1/posts/{self.post.id}/likers/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)
+        self.assertEqual(res.data["results"][0]["username"], "liker")
+
+    def test_rate_limiting_on_likes(self):
+        # Trigger rate limit (scope is 30/minute)
+        for i in range(30):
+            res = self.client.post(f"/api/v1/posts/like/{self.post.id}/", {"type": "post"}, format="json")
+            self.assertEqual(res.status_code, 200)
+
+        # The 31st request must trigger 429
+        res = self.client.post(f"/api/v1/posts/like/{self.post.id}/", {"type": "post"}, format="json")
+        self.assertEqual(res.status_code, 429)
+
+
+
 

@@ -64,3 +64,28 @@ def sync_post_hashtags(sender, instance, **kwargs):
         except Hashtag.DoesNotExist:
             pass
 
+
+from django.contrib.contenttypes.models import ContentType
+from .models import Like, Bookmark
+
+@receiver([post_save, post_delete], sender=Like)
+def update_like_count_cache(sender, instance, **kwargs):
+    content_type = instance.content_type
+    object_id = instance.object_id
+    try:
+        model_class = content_type.model_class()
+        target_obj = model_class.objects.get(id=object_id)
+        total_likes = Like.objects.filter(content_type=content_type, object_id=object_id).count()
+        target_obj.like_count = total_likes
+        target_obj.save(update_fields=['like_count'])
+    except Exception:
+        pass
+
+@receiver([post_save, post_delete], sender=Bookmark)
+def update_bookmark_count_cache(sender, instance, **kwargs):
+    post = instance.post
+    total_bookmarks = Bookmark.objects.filter(post=post).count()
+    post.bookmark_count = total_bookmarks
+    post.save(update_fields=['bookmark_count'])
+
+

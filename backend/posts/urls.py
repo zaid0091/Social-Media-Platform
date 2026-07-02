@@ -1,7 +1,8 @@
 from django.urls import path
 from .views import (
     PostCreateView, PostDetailView, PostUpdateView, 
-    PostDeleteView, UserPostListView, PostMediaUploadView
+    PostDeleteView, UserPostListView, PostMediaUploadView,
+    LikeView, CommentLikeView, BookmarkView, BookmarkListView, PostLikerListView
 )
 
 urlpatterns = [
@@ -11,5 +12,13 @@ urlpatterns = [
     path('<uuid:post_id>/update/', PostUpdateView.as_view(), name='post-update'),
     path('<uuid:post_id>/delete/', PostDeleteView.as_view(), name='post-delete'),
     path('user/<uuid:user_id>/', UserPostListView.as_view(), name='user-posts-list'),
+    
+    # Likes & Bookmarks endpoints
+    path('like/<uuid:object_id>/', LikeView.as_view(), name='like-toggle'),
+    path('comment-like/<uuid:comment_id>/', CommentLikeView.as_view(), name='comment-like-toggle'),
+    path('bookmark/<uuid:post_id>/', BookmarkView.as_view(), name='bookmark-toggle'),
+    path('bookmarks/', BookmarkListView.as_view(), name='bookmark-list'),
+    path('<uuid:post_id>/likers/', PostLikerListView.as_view(), name='post-likers'),
 ]
+
 
