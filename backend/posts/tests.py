@@ -1,3 +1,4 @@
+from accounts.models import BlockedUser
 from django.db import IntegrityError
 from django.test import TestCase
 from django.contrib.auth import get_user_model
@@ -126,7 +127,7 @@ class PostsModelTests(TestCase):
         self.assertEqual(view.post, self.post)
 
 from rest_framework.test import APIClient
-from accounts.models import Follow
+from accounts.models import Follow, BlockedUser
 
 class PostsAPITests(TestCase):
     def setUp(self):
@@ -447,6 +448,206 @@ class PostLikesAndBookmarksAPITests(TestCase):
         # The 31st request must trigger 429
         res = self.client.post(f"/api/v1/posts/like/{self.post.id}/", {"type": "post"}, format="json")
         self.assertEqual(res.status_code, 429)
+
+
+from notifications.models import Notification
+
+class PostCommentsAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="commenter",
+            email="commenter@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.post_author = User.objects.create_user(
+            username="author",
+            email="author@example.com",
+            password="Password123!",
+            is_active=True
+        )
+
+        self.other_user = User.objects.create_user(
+            username="other",
+            email="other@example.com",
+            password="Password123!",
+            is_active=True
+        )
+
+        self.post = Post.objects.create(
+            author=self.post_author,
+            content="Base post for commenting",
+            post_type="text"
+        )
+
+    def test_comment_creation_and_post_count_signal(self):
+        # Post comment
+        comment_data = {"content": "This is a root comment"}
+        res = self.client.post(f"/api/v1/posts/{self.post.id}/comments/", comment_data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["content"], "This is a root comment")
+        self.assertIsNone(res.data["parent"])
+        self.assertEqual(res.data["reply_count"], 0)
+
+        # Check Post's comment count updated to 1
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.comment_count, 1)
+
+    def test_nested_comments_and_reply_count_signals(self):
+        # 1. Create root comment
+        root = Comment.objects.create(
+            post=self.post,
+            author=self.post_author,
+            content="Root comment"
+        )
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.comment_count, 1)
+
+        # 2. Create Level 1 reply (nested level 1)
+        reply_data_1 = {
+            "content": "Level 1 reply to @author",
+            "parent": root.id
+        }
+        res = self.client.post(f"/api/v1/posts/{self.post.id}/comments/", reply_data_1, format="json")
+        self.assertEqual(res.status_code, 201)
+        reply_1_id = res.data["id"]
+
+        # Check parent's reply_count is updated to 1
+        root.refresh_from_db()
+        self.assertEqual(root.reply_count, 1)
+
+        # Check Post's comment count is updated to 2
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.comment_count, 2)
+
+        # 3. Create Level 2 reply (nested level 2 - child of reply 1)
+        reply_data_2 = {
+            "content": "Level 2 reply to Level 1 reply",
+            "parent": reply_1_id
+        }
+        res = self.client.post(f"/api/v1/posts/{self.post.id}/comments/", reply_data_2, format="json")
+        self.assertEqual(res.status_code, 201)
+        
+        # Check reply_1's reply_count is updated to 1
+        reply_1 = Comment.objects.get(id=reply_1_id)
+        self.assertEqual(reply_1.reply_count, 1)
+
+        # Check Post's comment count is updated to 3
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.comment_count, 3)
+
+    def test_comment_validation_across_different_posts(self):
+        other_post = Post.objects.create(
+            author=self.post_author,
+            content="Another post",
+            post_type="text"
+        )
+        root = Comment.objects.create(
+            post=self.post,
+            author=self.post_author,
+            content="Root comment on post 1"
+        )
+        # Attempt to reply to root comment but on post 2 -> should fail validation
+        reply_data = {
+            "content": "Invalid reply",
+            "parent": root.id
+        }
+        res = self.client.post(f"/api/v1/posts/{other_post.id}/comments/", reply_data, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("non_field_errors", res.data)
+
+    def test_comments_and_replies_retrieval(self):
+        # Create root comments
+        c1 = Comment.objects.create(post=self.post, author=self.user, content="Comment 1")
+        c2 = Comment.objects.create(post=self.post, author=self.user, content="Comment 2")
+        
+        # Create a reply to c1
+        r1 = Comment.objects.create(post=self.post, author=self.user, parent=c1, content="Reply to 1")
+
+        # Get comment list for post
+        res = self.client.get(f"/api/v1/posts/{self.post.id}/comments/")
+        self.assertEqual(res.status_code, 200)
+        # Should only list top-level comments (c1, c2), not r1
+        self.assertEqual(res.data["count"], 2)
+        self.assertEqual(res.data["results"][0]["content"], "Comment 2")
+        self.assertEqual(res.data["results"][1]["content"], "Comment 1")
+
+        # Get replies for c1
+        res = self.client.get(f"/api/v1/posts/comments/{c1.id}/replies/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)
+        self.assertEqual(res.data["results"][0]["content"], "Reply to 1")
+
+    def test_comment_update_permissions(self):
+        comment = Comment.objects.create(post=self.post, author=self.post_author, content="Edit me")
+
+        # commenter attempts to edit author's comment -> 403 Forbidden
+        res = self.client.patch(f"/api/v1/posts/comments/{comment.id}/", {"content": "Hacked content"})
+        self.assertEqual(res.status_code, 403)
+
+        # Authenticate as author and edit
+        self.client.force_authenticate(user=self.post_author)
+        res = self.client.patch(f"/api/v1/posts/comments/{comment.id}/", {"content": "Updated content"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["content"], "Updated content")
+
+    def test_comment_soft_delete_and_signals(self):
+        comment = Comment.objects.create(post=self.post, author=self.user, content="Delete me")
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.comment_count, 1)
+
+        # Soft delete comment
+        res = self.client.delete(f"/api/v1/posts/comments/{comment.id}/delete/")
+        self.assertEqual(res.status_code, 200)
+        
+        # Verify is_deleted is true in DB
+        comment.refresh_from_db()
+        self.assertTrue(comment.is_deleted)
+
+        # Check comment_count on Post decremented to 0
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.comment_count, 0)
+
+    def test_mention_parsing_and_notifications(self):
+        # Create comment mentioning "@author" and "@other" and "@nonexistent"
+        comment_data = {
+            "content": "Hello @author and @other, check this out! Also @nonexistent."
+        }
+        res = self.client.post(f"/api/v1/posts/{self.post.id}/comments/", comment_data, format="json")
+        self.assertEqual(res.status_code, 201)
+
+        # Verify notification created for "author"
+        author_notifications = Notification.objects.filter(recipient=self.post_author, notification_type='mention')
+        self.assertEqual(author_notifications.count(), 1)
+        self.assertEqual(author_notifications.first().sender, self.user)
+        self.assertEqual(author_notifications.first().related_post, self.post)
+
+        # Verify notification created for "other"
+        other_notifications = Notification.objects.filter(recipient=self.other_user, notification_type='mention')
+        self.assertEqual(other_notifications.count(), 1)
+
+        # Verify no notification for nonexistent user
+        self.assertFalse(Notification.objects.filter(recipient__username="nonexistent").exists())
+
+    def test_mention_parsing_with_blocks_excluded(self):
+        # Block: other user blocks commenter
+        BlockedUser.objects.create(blocker=self.other_user, blocked=self.user)
+
+        comment_data = {
+            "content": "Hey @author and @other!"
+        }
+        res = self.client.post(f"/api/v1/posts/{self.post.id}/comments/", comment_data, format="json")
+        self.assertEqual(res.status_code, 201)
+
+        # Notification for author should be created
+        self.assertTrue(Notification.objects.filter(recipient=self.post_author, notification_type='mention').exists())
+
+        # Notification for other should NOT be created due to block
+        self.assertFalse(Notification.objects.filter(recipient=self.other_user, notification_type='mention').exists())
+
 
 
 

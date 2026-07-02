@@ -66,7 +66,7 @@ def sync_post_hashtags(sender, instance, **kwargs):
 
 
 from django.contrib.contenttypes.models import ContentType
-from .models import Like, Bookmark
+from .models import Like, Bookmark, Comment
 
 @receiver([post_save, post_delete], sender=Like)
 def update_like_count_cache(sender, instance, **kwargs):
@@ -87,5 +87,19 @@ def update_bookmark_count_cache(sender, instance, **kwargs):
     total_bookmarks = Bookmark.objects.filter(post=post).count()
     post.bookmark_count = total_bookmarks
     post.save(update_fields=['bookmark_count'])
+
+@receiver([post_save, post_delete], sender=Comment)
+def update_comment_counts(sender, instance, **kwargs):
+    # Update Post's comment count
+    post = instance.post
+    post.comment_count = Comment.objects.filter(post=post, is_deleted=False).count()
+    post.save(update_fields=['comment_count'])
+
+    # Update Parent Comment's reply count (if reply)
+    if instance.parent:
+        parent = instance.parent
+        parent.reply_count = Comment.objects.filter(parent=parent, is_deleted=False).count()
+        parent.save(update_fields=['reply_count'])
+
 
 

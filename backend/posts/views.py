@@ -363,4 +363,153 @@ class PostLikerListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+from .serializers import CommentSerializer, CommentCreateSerializer
+
+class CommentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, post_id, *args, **kwargs):
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block check
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=post.author) |
+            Q(blocker=post.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        comments = Comment.objects.filter(post=post, parent__isnull=True, is_deleted=False).order_by('-created_at')
+
+        blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        all_blocked = set(list(blocked_users) + list(blockers))
+
+        comments = comments.exclude(author_id__in=all_blocked)
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        result_page = paginator.paginate_queryset(comments, request)
+        serializer = CommentSerializer(result_page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+    def post(self, request, post_id, *args, **kwargs):
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block check
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=post.author) |
+            Q(blocker=post.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data.copy()
+        data['post'] = post.id
+        serializer = CommentCreateSerializer(data=data)
+        if serializer.is_valid():
+            comment = serializer.save(author=request.user)
+
+            # Mention parsing: extract @username mentions
+            content = comment.content or ""
+            usernames = re.findall(r"@(\w+)", content)
+            for username in set(usernames):
+                try:
+                    mentioned_user = User.objects.get(username__iexact=username)
+                    if mentioned_user != request.user:
+                        if not BlockedUser.objects.filter(
+                            Q(blocker=request.user, blocked=mentioned_user) |
+                            Q(blocker=mentioned_user, blocked=request.user)
+                        ).exists():
+                            from notifications.models import Notification
+                            Notification.objects.create(
+                                recipient=mentioned_user,
+                                sender=request.user,
+                                notification_type='mention',
+                                related_post=post,
+                                related_comment=comment
+                            )
+                except User.DoesNotExist:
+                    pass
+
+            return Response(CommentSerializer(comment, context={'request': request}).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class CommentRepliesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, comment_id, *args, **kwargs):
+        try:
+            comment = Comment.objects.get(id=comment_id, is_deleted=False)
+        except Comment.DoesNotExist:
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=comment.author) |
+            Q(blocker=comment.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        replies = Comment.objects.filter(parent=comment, is_deleted=False).order_by('created_at')
+
+        blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        all_blocked = set(list(blocked_users) + list(blockers))
+
+        replies = replies.exclude(author_id__in=all_blocked)
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        result_page = paginator.paginate_queryset(replies, request)
+        serializer = CommentSerializer(result_page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+class CommentUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, comment_id, *args, **kwargs):
+        try:
+            comment = Comment.objects.get(id=comment_id, is_deleted=False)
+        except Comment.DoesNotExist:
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if comment.author != request.user:
+            return Response({"error": "You do not have permission to edit this comment."}, status=status.HTTP_403_FORBIDDEN)
+
+        content = request.data.get('content')
+        if content is not None:
+            comment.content = content
+            comment.save()
+        
+        return Response(CommentSerializer(comment, context={'request': request}).data, status=status.HTTP_200_OK)
+
+    def put(self, request, comment_id, *args, **kwargs):
+        return self.patch(request, comment_id, *args, **kwargs)
+
+class CommentDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, comment_id, *args, **kwargs):
+        try:
+            comment = Comment.objects.get(id=comment_id, is_deleted=False)
+        except Comment.DoesNotExist:
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if comment.author != request.user:
+            return Response({"error": "You do not have permission to delete this comment."}, status=status.HTTP_403_FORBIDDEN)
+
+        comment.is_deleted = True
+        comment.save(update_fields=['is_deleted'])
+
+        return Response({"message": "Comment successfully deleted."}, status=status.HTTP_200_OK)
+
+    def post(self, request, comment_id, *args, **kwargs):
+        return self.delete(request, comment_id, *args, **kwargs)
+
+
+
 

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from accounts.serializers import UserFollowDetailsSerializer
 from accounts.models import Follow
-from .models import Post, PostMedia, Like, Bookmark
+from .models import Post, PostMedia, Like, Bookmark, Comment
 
 User = get_user_model()
 
@@ -67,3 +67,35 @@ class PostCreateSerializer(serializers.ModelSerializer):
             'privacy': {'required': False},
             'post_type': {'required': False}
         }
+
+class CommentSerializer(serializers.ModelSerializer):
+    author = UserFollowDetailsSerializer(read_only=True)
+    is_liked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = ('id', 'post', 'author', 'parent', 'content', 'like_count', 'reply_count', 'is_liked', 'created_at')
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        comment_ct = ContentType.objects.get_for_model(Comment)
+        return Like.objects.filter(
+            user=request.user,
+            content_type=comment_ct,
+            object_id=obj.id
+        ).exists()
+
+class CommentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ('post', 'content', 'parent')
+
+    def validate(self, attrs):
+        parent = attrs.get('parent')
+        post = attrs.get('post')
+        if parent and parent.post != post:
+            raise serializers.ValidationError("Parent comment must belong to the same post.")
+        return attrs
+
