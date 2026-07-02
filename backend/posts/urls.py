@@ -3,10 +3,12 @@ from .views import (
     PostCreateView, PostDetailView, PostUpdateView, 
     PostDeleteView, UserPostListView, PostMediaUploadView,
     LikeView, CommentLikeView, BookmarkView, BookmarkListView, PostLikerListView,
-    CommentListCreateView, CommentRepliesView, CommentUpdateView, CommentDeleteView
+    CommentListCreateView, CommentRepliesView, CommentUpdateView, CommentDeleteView,
+    FeedView
 )
 
 urlpatterns = [
+    path('feed/', FeedView.as_view(), name='news-feed'),
     path('', PostCreateView.as_view(), name='post-create'),
     path('upload-media/', PostMediaUploadView.as_view(), name='post-media-upload'),
     path('<uuid:post_id>/', PostDetailView.as_view(), name='post-detail'),

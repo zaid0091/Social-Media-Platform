@@ -649,6 +649,118 @@ class PostCommentsAPITests(TestCase):
         self.assertFalse(Notification.objects.filter(recipient=self.other_user, notification_type='mention').exists())
 
 
+class NewsFeedAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="feed_user",
+            email="feed@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.followed_1 = User.objects.create_user(
+            username="followed1",
+            email="f1@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        Follow.objects.create(follower=self.user, following=self.followed_1)
+
+        self.followed_2 = User.objects.create_user(
+            username="followed2",
+            email="f2@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        Follow.objects.create(follower=self.user, following=self.followed_2)
+
+        self.unfollowed = User.objects.create_user(
+            username="unfollowed",
+            email="unfollowed@example.com",
+            password="Password123!",
+            is_active=True
+        )
+
+        self.post_public = Post.objects.create(
+            author=self.followed_1,
+            content="Followed1 Public Post",
+            privacy="public",
+            post_type="text"
+        )
+        self.post_followers = Post.objects.create(
+            author=self.followed_1,
+            content="Followed1 Followers-only Post",
+            privacy="followers",
+            post_type="text"
+        )
+        self.post_private = Post.objects.create(
+            author=self.followed_1,
+            content="Followed1 Private Post",
+            privacy="private",
+            post_type="text"
+        )
+
+        self.post_f2_public = Post.objects.create(
+            author=self.followed_2,
+            content="Followed2 Public Post",
+            privacy="public",
+            post_type="text"
+        )
+
+        self.post_unfollowed = Post.objects.create(
+            author=self.unfollowed,
+            content="Unfollowed Public Post",
+            privacy="public",
+            post_type="text"
+        )
+
+    def test_chronological_feed_privacy_and_graph(self):
+        res = self.client.get("/api/v1/posts/feed/?feed_type=chronological")
+        self.assertEqual(res.status_code, 200)
+
+        self.assertIn("results", res.data)
+        posts_data = res.data["results"]
+
+        self.assertEqual(len(posts_data), 3)
+
+        self.assertEqual(posts_data[0]["id"], str(self.post_f2_public.id))
+        self.assertEqual(posts_data[1]["id"], str(self.post_followers.id))
+        self.assertEqual(posts_data[2]["id"], str(self.post_public.id))
+
+    def test_feed_block_exclusions(self):
+        BlockedUser.objects.create(blocker=self.followed_2, blocked=self.user)
+
+        res = self.client.get("/api/v1/posts/feed/?feed_type=chronological")
+        self.assertEqual(res.status_code, 200)
+        posts_data = res.data["results"]
+
+        self.assertEqual(len(posts_data), 2)
+        self.assertNotIn(str(self.post_f2_public.id), [p["id"] for p in posts_data])
+
+    def test_ranked_feed_and_cache_refresh(self):
+        self.post_public.like_count = 10
+        self.post_public.comment_count = 5
+        self.post_public.save()
+
+        res = self.client.get("/api/v1/posts/feed/?feed_type=ranked")
+        self.assertEqual(res.status_code, 200)
+        posts_data = res.data["results"]
+
+        self.assertEqual(posts_data[0]["id"], str(self.post_public.id))
+
+        self.post_followers.like_count = 100
+        self.post_followers.save()
+
+        res = self.client.get("/api/v1/posts/feed/?feed_type=ranked")
+        self.assertEqual(res.data["results"][0]["id"], str(self.post_public.id))
+
+        res = self.client.get("/api/v1/posts/feed/?feed_type=ranked&refresh=true")
+        self.assertEqual(res.data["results"][0]["id"], str(self.post_followers.id))
+
+
+
 
 
 

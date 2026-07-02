@@ -511,5 +511,88 @@ class CommentDeleteView(APIView):
         return self.delete(request, comment_id, *args, **kwargs)
 
 
+from django.core.cache import cache
+from rest_framework.pagination import CursorPagination
+from django.db.models import Case, When
+from .services import FeedGenerationService
+
+class ChronologicalFeedPagination(CursorPagination):
+    page_size = 10
+    ordering = '-created_at'
+
+class FeedView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        feed_type = request.query_params.get('feed_type', 'ranked').lower()
+        refresh = request.query_params.get('refresh', '').lower() == 'true'
+
+        if feed_type == 'chronological':
+            # 1. Get followed users
+            followed_ids = list(Follow.objects.filter(follower=request.user).values_list('following_id', flat=True))
+            
+            # 2. Get blocked users
+            blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+            blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+            all_blocked = set(list(blocked_users) + list(blockers))
+
+            # 3. Retrieve posts
+            posts = Post.objects.filter(
+                author_id__in=followed_ids,
+                is_deleted=False
+            ).exclude(
+                author_id__in=all_blocked
+            ).exclude(
+                privacy='private'
+            ).order_by('-created_at')
+
+            paginator = ChronologicalFeedPagination()
+            result_page = paginator.paginate_queryset(posts, request)
+            serializer = PostSerializer(result_page, many=True, context={'request': request})
+            return paginator.get_paginated_response(serializer.data)
+
+        else:
+            # Ranked feed
+            if refresh:
+                cache_key = f"user_feed_{request.user.id}"
+                cache.delete(cache_key)
+
+            post_ids = FeedGenerationService.generate_ranked_feed(request.user)
+
+            # Paginate cached ranked list using index-based cursor
+            cursor = request.query_params.get('cursor')
+            offset = 0
+            if cursor:
+                try:
+                    import base64
+                    offset = int(base64.b64decode(cursor.encode()).decode())
+                except Exception:
+                    offset = 0
+
+            limit = 10
+            page_ids = post_ids[offset:offset+limit]
+
+            # Fetch posts in exact order of list IDs
+            if page_ids:
+                clauses = [When(id=pk, then=pos) for pos, pk in enumerate(page_ids)]
+                posts = Post.objects.filter(id__in=page_ids).order_by(Case(*clauses))
+            else:
+                posts = Post.objects.none()
+
+            serializer = PostSerializer(posts, many=True, context={'request': request})
+
+            next_offset = offset + limit
+            next_cursor = None
+            if next_offset < len(post_ids):
+                import base64
+                next_cursor = base64.b64encode(str(next_offset).encode()).decode()
+
+            return Response({
+                "next": next_cursor,
+                "results": serializer.data
+            }, status=status.HTTP_200_OK)
+
+
+
 
 
