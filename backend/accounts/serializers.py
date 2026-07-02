@@ -109,3 +109,34 @@ class ProfilePictureUploadSerializer(serializers.ModelSerializer):
             'cover_photo': {'required': False}
         }
 
+class UserFollowDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'full_name', 'profile_picture', 'is_verified')
+
+from .models import Follow, FollowRequest, BlockedUser
+
+class FollowSerializer(serializers.ModelSerializer):
+    follower = UserFollowDetailsSerializer(read_only=True)
+    following = UserFollowDetailsSerializer(read_only=True)
+
+    class Meta:
+        model = Follow
+        fields = ('id', 'follower', 'following', 'created_at')
+
+class FollowRequestSerializer(serializers.ModelSerializer):
+    requester = UserFollowDetailsSerializer(read_only=True)
+    receiver = UserFollowDetailsSerializer(read_only=True)
+
+    class Meta:
+        model = FollowRequest
+        fields = ('id', 'requester', 'receiver', 'status', 'created_at')
+
+class BlockedUserSerializer(serializers.ModelSerializer):
+    blocked = UserFollowDetailsSerializer(read_only=True)
+
+    class Meta:
+        model = BlockedUser
+        fields = ('id', 'blocked', 'created_at')
+
+

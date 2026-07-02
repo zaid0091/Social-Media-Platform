@@ -248,4 +248,118 @@ class AccountsManagementTests(TestCase):
         self.assertEqual(res.data[0]["username"], "david")
 
 
+class AccountsFollowSystemTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="charlie",
+            email="charlie@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.public_user = User.objects.create_user(
+            username="publicuser",
+            email="public@example.com",
+            password="Password123!",
+            is_active=True,
+            is_private=False
+        )
+
+        self.private_user = User.objects.create_user(
+            username="privateuser",
+            email="private@example.com",
+            password="Password123!",
+            is_active=True,
+            is_private=True
+        )
+
+    def test_follow_unfollow_public_user_and_signals(self):
+        # Follow public user
+        res = self.client.post(f"/api/v1/users/follow/{self.public_user.id}/")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["message"], "Successfully followed user.")
+
+        # Check signals updated cache counts
+        self.user.refresh_from_db()
+        self.public_user.refresh_from_db()
+        self.assertEqual(self.user.following_count, 1)
+        self.assertEqual(self.public_user.follower_count, 1)
+
+        # Unfollow
+        res = self.client.post(f"/api/v1/users/unfollow/{self.public_user.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "Successfully unfollowed user.")
+
+        # Check signals decremented counts
+        self.user.refresh_from_db()
+        self.public_user.refresh_from_db()
+        self.assertEqual(self.user.following_count, 0)
+        self.assertEqual(self.public_user.follower_count, 0)
+
+    def test_follow_request_flow(self):
+        # Follow private user -> creates follow request
+        res = self.client.post(f"/api/v1/users/follow/{self.private_user.id}/")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["message"], "Follow request sent.")
+
+        req = FollowRequest.objects.get(requester=self.user, receiver=self.private_user)
+        self.assertEqual(req.status, "pending")
+
+        # Accept request
+        # We need to authenticate as the receiver (private_user)
+        self.client.force_authenticate(user=self.private_user)
+        res = self.client.post(f"/api/v1/users/follow-requests/{req.id}/accept/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "Follow request accepted.")
+
+        # Verify Follow was created
+        self.assertTrue(Follow.objects.filter(follower=self.user, following=self.private_user).exists())
+        self.assertFalse(FollowRequest.objects.filter(id=req.id).exists())
+
+        # Verify counts caches updated via signals
+        self.user.refresh_from_db()
+        self.private_user.refresh_from_db()
+        self.assertEqual(self.user.following_count, 1)
+        self.assertEqual(self.private_user.follower_count, 1)
+
+    def test_block_unblock_and_profile_restriction(self):
+        # Establish follow first
+        Follow.objects.create(follower=self.user, following=self.public_user)
+        Follow.objects.create(follower=self.public_user, following=self.user)
+
+        self.user.refresh_from_db()
+        self.public_user.refresh_from_db()
+        self.assertEqual(self.user.following_count, 1)
+        self.assertEqual(self.user.follower_count, 1)
+
+        # Block public user
+        res = self.client.post(f"/api/v1/users/block/{self.public_user.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "User blocked successfully.")
+
+        # Verify block is created
+        self.assertTrue(BlockedUser.objects.filter(blocker=self.user, blocked=self.public_user).exists())
+
+        # Verify follows deleted both ways and counts updated
+        self.assertFalse(Follow.objects.filter(follower=self.user, following=self.public_user).exists())
+        self.assertFalse(Follow.objects.filter(follower=self.public_user, following=self.user).exists())
+
+        self.user.refresh_from_db()
+        self.public_user.refresh_from_db()
+        self.assertEqual(self.user.following_count, 0)
+        self.assertEqual(self.user.follower_count, 0)
+
+        # Verify blocked user profile returns 404
+        res = self.client.get(f"/api/v1/users/profile/{self.public_user.username}/")
+        self.assertEqual(res.status_code, 404)
+
+        # Authenticate as blocked user to try and view blocker profile -> returns 404
+        self.client.force_authenticate(user=self.public_user)
+        res = self.client.get(f"/api/v1/users/profile/{self.user.username}/")
+        self.assertEqual(res.status_code, 404)
+
+
+
 

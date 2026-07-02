@@ -3,7 +3,9 @@ from .views import (
     RegisterView, VerifyEmailView, LoginView, 
     LogoutView, CookieTokenRefreshView,
     UserProfileView, PublicProfileView, ChangePasswordView,
-    DeleteAccountView, UserSearchView, UserSuggestionView
+    DeleteAccountView, UserSearchView, UserSuggestionView,
+    FollowView, UnfollowView, FollowRequestListView, FollowRequestActionView,
+    FollowerListView, FollowingListView, BlockUserView, UnblockUserView, BlockedUserListView
 )
 
 urlpatterns = [
@@ -20,5 +22,18 @@ urlpatterns = [
     path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),
     path('search/', UserSearchView.as_view(), name='user-search'),
     path('suggestions/', UserSuggestionView.as_view(), name='user-suggestions'),
+
+    # Follow / Block System endpoints
+    path('follow/<uuid:user_id>/', FollowView.as_view(), name='follow'),
+    path('unfollow/<uuid:user_id>/', UnfollowView.as_view(), name='unfollow'),
+    path('follow-requests/', FollowRequestListView.as_view(), name='follow-request-list'),
+    path('follow-requests/<int:request_id>/accept/', FollowRequestActionView.as_view(), {'action': 'accept'}, name='follow-request-accept'),
+    path('follow-requests/<int:request_id>/reject/', FollowRequestActionView.as_view(), {'action': 'reject'}, name='follow-request-reject'),
+    path('<uuid:user_id>/followers/', FollowerListView.as_view(), name='followers-list'),
+    path('<uuid:user_id>/following/', FollowingListView.as_view(), name='following-list'),
+    path('block/<uuid:user_id>/', BlockUserView.as_view(), name='block-user'),
+    path('unblock/<uuid:user_id>/', UnblockUserView.as_view(), name='unblock-user'),
+    path('blocks/', BlockedUserListView.as_view(), name='blocked-users-list'),
 ]
+
 

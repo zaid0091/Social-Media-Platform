@@ -204,6 +204,14 @@ class PublicProfileView(APIView):
         except User.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # Enforce block policy: Return 404 if blocked in either direction
+        from .models import BlockedUser
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_user) |
+            Q(blocker=target_user, blocked=request.user)
+        ).exists():
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
         is_self = (request.user == target_user)
         is_following = False
         if not is_self:
@@ -293,4 +301,192 @@ class UserSuggestionView(APIView):
 
         serializer = UserSerializer(suggestions, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+from rest_framework.pagination import PageNumberPagination
+from .models import FollowRequest, BlockedUser
+from .serializers import FollowSerializer, FollowRequestSerializer, BlockedUserSerializer
+
+class FollowView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user == target_user:
+            return Response({"error": "You cannot follow yourself."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if blocked
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_user) |
+            Q(blocker=target_user, blocked=request.user)
+        ).exists():
+            return Response({"error": "Cannot perform this action."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if already following
+        if Follow.objects.filter(follower=request.user, following=target_user).exists():
+            return Response({"message": "You are already following this user."}, status=status.HTTP_200_OK)
+
+        # Private Account logic
+        if target_user.is_private:
+            req, created = FollowRequest.objects.get_or_create(
+                requester=request.user,
+                receiver=target_user,
+                status='pending'
+            )
+            if created:
+                return Response({"message": "Follow request sent."}, status=status.HTTP_201_CREATED)
+            return Response({"message": "Follow request already pending."}, status=status.HTTP_200_OK)
+
+        # Public Account logic
+        Follow.objects.create(follower=request.user, following=target_user)
+        return Response({"message": "Successfully followed user."}, status=status.HTTP_201_CREATED)
+
+class UnfollowView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_follow, _ = Follow.objects.filter(follower=request.user, following=target_user).delete()
+        deleted_request, _ = FollowRequest.objects.filter(requester=request.user, receiver=target_user).delete()
+
+        if deleted_follow or deleted_request:
+            return Response({"message": "Successfully unfollowed user."}, status=status.HTTP_200_OK)
+        return Response({"message": "You were not following this user."}, status=status.HTTP_200_OK)
+
+class FollowRequestListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        requests = FollowRequest.objects.filter(receiver=request.user, status='pending').order_by('-created_at')
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        result_page = paginator.paginate_queryset(requests, request)
+        serializer = FollowRequestSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class FollowRequestActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id, *args, **kwargs):
+        action = self.kwargs.get('action')
+        try:
+            req = FollowRequest.objects.get(id=request_id, receiver=request.user, status='pending')
+        except FollowRequest.DoesNotExist:
+            return Response({"error": "Follow request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if action == 'accept':
+            # Create Follow relationship
+            Follow.objects.get_or_create(follower=req.requester, following=request.user)
+            req.delete()
+            return Response({"message": "Follow request accepted."}, status=status.HTTP_200_OK)
+        elif action == 'reject':
+            req.delete()
+            return Response({"message": "Follow request rejected."}, status=status.HTTP_200_OK)
+        
+        return Response({"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
+
+class FollowerListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Blocked check
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_user) |
+            Q(blocker=target_user, blocked=request.user)
+        ).exists():
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        followers = Follow.objects.filter(following=target_user).order_by('-created_at')
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        result_page = paginator.paginate_queryset(followers, request)
+        serializer = FollowSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class FollowingListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Blocked check
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_user) |
+            Q(blocker=target_user, blocked=request.user)
+        ).exists():
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        following = Follow.objects.filter(follower=target_user).order_by('-created_at')
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        result_page = paginator.paginate_queryset(following, request)
+        serializer = FollowSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class BlockUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user == target_user:
+            return Response({"error": "You cannot block yourself."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create Block relationship
+        BlockedUser.objects.get_or_create(blocker=request.user, blocked=target_user)
+
+        # Break follows both ways
+        Follow.objects.filter(follower=request.user, following=target_user).delete()
+        Follow.objects.filter(follower=target_user, following=request.user).delete()
+
+        # Delete pending requests both ways
+        FollowRequest.objects.filter(requester=request.user, receiver=target_user).delete()
+        FollowRequest.objects.filter(requester=target_user, receiver=request.user).delete()
+
+        return Response({"message": "User blocked successfully."}, status=status.HTTP_200_OK)
+
+class UnblockUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted, _ = BlockedUser.objects.filter(blocker=request.user, blocked=target_user).delete()
+        if deleted:
+            return Response({"message": "User unblocked successfully."}, status=status.HTTP_200_OK)
+        return Response({"message": "You had not blocked this user."}, status=status.HTTP_200_OK)
+
+class BlockedUserListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        blocked = BlockedUser.objects.filter(blocker=request.user).order_by('-created_at')
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        result_page = paginator.paginate_queryset(blocked, request)
+        serializer = BlockedUserSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
 
