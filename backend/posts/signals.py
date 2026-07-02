@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from .models import Post
 
@@ -19,6 +19,18 @@ def update_user_post_count_on_delete(sender, instance, **kwargs):
 
 import re
 from hashtags.models import Hashtag, PostHashtag
+
+@receiver(pre_delete, sender=Post)
+def clean_hashtags_on_post_hard_delete(sender, instance, **kwargs):
+    associations = PostHashtag.objects.filter(post=instance)
+    hashtag_ids = list(associations.values_list('hashtag_id', flat=True))
+    for hid in hashtag_ids:
+        try:
+            h = Hashtag.objects.get(id=hid)
+            h.post_count = max(0, PostHashtag.objects.filter(hashtag=h).count() - 1)
+            h.save(update_fields=['post_count'])
+        except Hashtag.DoesNotExist:
+            pass
 
 @receiver(post_save, sender=Post)
 def sync_post_hashtags(sender, instance, **kwargs):

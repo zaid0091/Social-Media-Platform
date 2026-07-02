@@ -189,3 +189,12 @@ if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
         secure=True
     )
 
+# Celery Configuration Options
+CELERY_BROKER_URL = env.str('REDIS_URL', 'redis://localhost:6379/0?protocol=2')
+CELERY_RESULT_BACKEND = env.str('REDIS_URL', 'redis://localhost:6379/0?protocol=2')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+

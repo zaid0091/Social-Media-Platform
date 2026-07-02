@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/v1/auth/", include("accounts.urls")),
     path("api/v1/users/", include("accounts.urls")),
     path("api/v1/posts/", include("posts.urls")),
+    path("api/v1/hashtags/", include("hashtags.urls")),
 ]
 
 if settings.DEBUG:
