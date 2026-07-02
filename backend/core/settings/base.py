@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     # Third-party apps
     "corsheaders",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "channels",
 
     # Custom apps
@@ -140,3 +141,26 @@ CHANNEL_LAYERS = {
 # Custom User authentication model configuration
 AUTH_USER_MODEL = "accounts.User"
 
+from datetime import timedelta
+
+# SimpleJWT configuration
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# JWT HTTP-Only Cookie settings
+JWT_COOKIE_SECURE = False  # Set to True in production
+JWT_COOKIE_HTTPONLY = True
+JWT_COOKIE_SAMESITE = "Lax"
+JWT_COOKIE_NAME = "refresh_token"
+
+# Email Configuration for local development: logs emails to console
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@socialmedia.local"
