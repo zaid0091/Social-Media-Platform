@@ -425,8 +425,8 @@ class CommentListCreateView(APIView):
                             Q(blocker=request.user, blocked=mentioned_user) |
                             Q(blocker=mentioned_user, blocked=request.user)
                         ).exists():
-                            from notifications.models import Notification
-                            Notification.objects.create(
+                            from notifications.utils import create_notification
+                            create_notification(
                                 recipient=mentioned_user,
                                 sender=request.user,
                                 notification_type='mention',

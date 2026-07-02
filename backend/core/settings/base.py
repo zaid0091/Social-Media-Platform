@@ -190,12 +190,28 @@ if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
     )
 
 # Celery Configuration Options
-CELERY_BROKER_URL = env.str('REDIS_URL', 'redis://localhost:6379/0?protocol=2')
-CELERY_RESULT_BACKEND = env.str('REDIS_URL', 'redis://localhost:6379/0?protocol=2')
+CELERY_BROKER_URL = env.str('REDIS_URL', 'redis://localhost:6379/0').split('?')[0]
+CELERY_RESULT_BACKEND = env.str('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'redis_connection_kwargs': {
+        'protocol': 2
+    }
+}
+CELERY_REDIS_BACKEND_TRANSPORT_OPTIONS = {
+    'redis_connection_kwargs': {
+        'protocol': 2
+    }
+}
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+    'redis_connection_kwargs': {
+        'protocol': 2
+    }
+}
 
 CELERY_BEAT_SCHEDULE = {
     'recalculate-trending-hashtags-every-15-min': {
@@ -207,6 +223,17 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 3600.0,
     },
 }
+
+import sys
+if 'test' in sys.argv:
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
+        "anon": "999999/day",
+        "user": "999999/day",
+        "likes": "30/minute",
+    }
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
 
 
 
