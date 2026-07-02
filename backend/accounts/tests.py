@@ -146,4 +146,106 @@ class AccountsAuthTests(TestCase):
         # Cookie should be deleted/expired
         self.assertEqual(self.client.cookies["refresh_token"].value, "")
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+class AccountsManagementTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="charlie",
+            email="charlie@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+        
+        self.other_user = User.objects.create_user(
+            username="david",
+            email="david@example.com",
+            password="Password123!",
+            is_active=True,
+            full_name="David Copperfield",
+            location="New York"
+        )
+
+    def test_get_and_update_profile(self):
+        # GET own profile
+        res = self.client.get("/api/v1/users/profile/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["username"], "charlie")
+
+        # PATCH own profile
+        update_data = {"bio": "Just a new bio", "location": "London"}
+        res = self.client.patch("/api/v1/users/profile/", update_data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["bio"], "Just a new bio")
+        self.assertEqual(res.data["location"], "London")
+
+    def test_upload_profile_picture(self):
+        small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
+            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
+            b'\x02\x4c\x01\x00\x3b'
+        )
+        profile_pic = SimpleUploadedFile('profile.gif', small_gif, content_type='image/gif')
+        
+        res = self.client.patch(
+            "/api/v1/users/profile/", 
+            {"profile_picture": profile_pic}, 
+            format="multipart"
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertIsNotNone(res.data["profile_picture"])
+
+    def test_public_profile_privacy(self):
+        # Make david account private
+        self.other_user.is_private = True
+        self.other_user.save()
+
+        # Retrieve profile of private user without following
+        res = self.client.get(f"/api/v1/users/profile/{self.other_user.username}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["is_accessible"])
+        self.assertIsNone(res.data["location"])  # Location should be stripped
+
+        # Follow david
+        Follow.objects.create(follower=self.user, following=self.other_user)
+        res = self.client.get(f"/api/v1/users/profile/{self.other_user.username}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["is_accessible"])
+        self.assertEqual(res.data["location"], "New York")
+
+    def test_change_password(self):
+        pwd_data = {
+            "old_password": "Password123!",
+            "new_password": "NewPassword123!",
+            "new_password_confirm": "NewPassword123!"
+        }
+        res = self.client.post("/api/v1/users/change-password/", pwd_data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # Verify new password
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewPassword123!"))
+
+    def test_delete_account(self):
+        res = self.client.post("/api/v1/users/delete-account/")
+        self.assertEqual(res.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_active)
+
+    def test_search_and_suggestions(self):
+        # Search
+        res = self.client.get("/api/v1/users/search/?q=david")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["username"], "david")
+
+        # Suggestions
+        res = self.client.get("/api/v1/users/suggestions/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["username"], "david")
+
+
 

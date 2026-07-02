@@ -169,3 +169,128 @@ class CookieTokenRefreshView(APIView):
             
         except Exception:
             return Response({"error": "Invalid or expired refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+from django.db.models import Q
+from rest_framework.permissions import IsAuthenticated
+from .models import Follow
+from .serializers import UserUpdateSerializer, ChangePasswordSerializer, ProfilePictureUploadSerializer
+
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, *args, **kwargs):
+        # Determine serializer depending on uploaded files or textual field updates
+        if 'profile_picture' in request.FILES or 'cover_photo' in request.FILES:
+            serializer = ProfilePictureUploadSerializer(request.user, data=request.data, partial=True)
+        else:
+            serializer = UserUpdateSerializer(request.user, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PublicProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username, *args, **kwargs):
+        try:
+            target_user = User.objects.get(username__iexact=username, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_self = (request.user == target_user)
+        is_following = False
+        if not is_self:
+            is_following = Follow.objects.filter(follower=request.user, following=target_user).exists()
+
+        is_accessible = not target_user.is_private or is_self or is_following
+
+        serializer_data = UserSerializer(target_user).data
+        serializer_data['is_following'] = is_following
+        serializer_data['is_self'] = is_self
+        serializer_data['is_accessible'] = is_accessible
+
+        if not is_accessible:
+            # Hide sensitive fields for private profile if not followed
+            sensitive_fields = ['email', 'phone_number', 'date_of_birth', 'website', 'location']
+            for field in sensitive_fields:
+                serializer_data[field] = None
+
+        return Response(serializer_data, status=status.HTTP_200_OK)
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            user = request.user
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({"message": "Password changed successfully."}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class DeleteAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        # Soft delete: mark user inactive
+        user.is_active = False
+        user.save()
+
+        # Blacklist refresh token if present to log user out immediately
+        refresh_token = request.COOKIES.get(settings.JWT_COOKIE_NAME)
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            except Exception:
+                pass
+
+        response = Response({"message": "Account successfully deactivated (soft deleted)."}, status=status.HTTP_200_OK)
+        response.delete_cookie(settings.JWT_COOKIE_NAME)
+        return response
+
+    def delete(self, request, *args, **kwargs):
+        return self.post(request, *args, **kwargs)
+
+class UserSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        query = request.query_params.get('q', '')
+        if not query:
+            return Response([], status=status.HTTP_200_OK)
+
+        users = User.objects.filter(
+            Q(username__icontains=query) | Q(full_name__icontains=query),
+            is_active=True
+        ).exclude(id=request.user.id)[:20]
+
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class UserSuggestionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # Exclude self and already followed users
+        followed_ids = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+        suggestions = User.objects.filter(
+            is_active=True
+        ).exclude(
+            id=request.user.id
+        ).exclude(
+            id__in=followed_ids
+        ).order_by('-is_verified', '-follower_count')[:5]
+
+        serializer = UserSerializer(suggestions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+

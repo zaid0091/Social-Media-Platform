@@ -63,3 +63,49 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             is_active=False  # Keep inactive until email is verified
         )
         return user
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            'full_name', 'bio', 'website', 'location', 
+            'date_of_birth', 'phone_number', 'is_private', 'account_type'
+        )
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    new_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    new_password_confirm = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Old password is incorrect.")
+        return value
+
+    def validate(self, data):
+        if data['new_password'] != data['new_password_confirm']:
+            raise serializers.ValidationError({"new_password_confirm": "New passwords do not match."})
+        
+        # New password complexity check
+        password = data['new_password']
+        if len(password) < 8:
+            raise serializers.ValidationError({"new_password": "New password must be at least 8 characters long."})
+        if not re.search(r"[a-zA-Z]", password):
+            raise serializers.ValidationError({"new_password": "New password must contain at least one letter."})
+        if not re.search(r"\d", password):
+            raise serializers.ValidationError({"new_password": "New password must contain at least one number."})
+        if not re.search(r"[@$!%*?&#]", password):
+            raise serializers.ValidationError({"new_password": "New password must contain at least one special character (@$!%*?&#)."})
+
+        return data
+
+class ProfilePictureUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('profile_picture', 'cover_photo')
+        extra_kwargs = {
+            'profile_picture': {'required': False},
+            'cover_photo': {'required': False}
+        }
+
