@@ -136,3 +136,7 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+# Custom User authentication model configuration
+AUTH_USER_MODEL = "accounts.User"
+
