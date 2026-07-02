@@ -1,0 +1,81 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: social_db
+    environment:
+      POSTGRES_DB: social_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - social_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d social_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: social_redis
+    networks:
+      - social_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: social_backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/social_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - social_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: social_frontend
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - backend
+    networks:
+      - social_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: social_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - social_network
+
+volumes:
+  postgres_data:
+  media_data:
+
+networks:
+  social_network:
+    driver: bridge
