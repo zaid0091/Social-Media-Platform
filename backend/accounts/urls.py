@@ -36,4 +36,10 @@ urlpatterns = [
     path('blocks/', BlockedUserListView.as_view(), name='blocked-users-list'),
 ]
 
+from posts.views import UserPostListView
+urlpatterns += [
+    path('<uuid:user_id>/posts/', UserPostListView.as_view(), name='user-posts-list-under-users'),
+]
+
+
 

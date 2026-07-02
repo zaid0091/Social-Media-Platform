@@ -11,8 +11,8 @@ class HashtagsModelTests(TestCase):
         self.post = Post.objects.create(author=self.user, content="This is an awesome post #tech", post_type="text")
 
     def test_hashtag_creation(self):
-        hashtag = Hashtag.objects.create(name="tech")
-        self.assertEqual(hashtag.name, "tech")
+        hashtag = Hashtag.objects.create(name="tech2")
+        self.assertEqual(hashtag.name, "tech2")
         self.assertEqual(hashtag.post_count, 0)
 
         association = PostHashtag.objects.create(post=self.post, hashtag=hashtag)

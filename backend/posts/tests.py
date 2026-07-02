@@ -125,3 +125,99 @@ class PostsModelTests(TestCase):
         self.assertEqual(view.user, self.user2)
         self.assertEqual(view.post, self.post)
 
+from rest_framework.test import APIClient
+from accounts.models import Follow
+
+class PostsAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="charlie",
+            email="charlie@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.private_user = User.objects.create_user(
+            username="privateuser",
+            email="private@example.com",
+            password="Password123!",
+            is_active=True,
+            is_private=True
+        )
+
+    def test_post_creation_and_hashtag_extraction(self):
+        post_data = {
+            "content": "Hello, this is a test post #first #test",
+            "privacy": "public",
+            "post_type": "text"
+        }
+        res = self.client.post("/api/v1/posts/", post_data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["content"], "Hello, this is a test post #first #test")
+        self.assertEqual(len(res.data["hashtags"]), 2)
+        self.assertIn("first", res.data["hashtags"])
+        self.assertIn("test", res.data["hashtags"])
+
+        # Check signals updated user post count
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.post_count, 1)
+
+    def test_post_edit_and_hashtag_recalculation(self):
+        # Create initial post
+        post = Post.objects.create(author=self.user, content="Hello #first", post_type="text")
+        
+        # Verify initial hashtag
+        res = self.client.get(f"/api/v1/posts/{post.id}/")
+        self.assertEqual(len(res.data["hashtags"]), 1)
+
+        # Update post to have different hashtags
+        update_data = {"content": "Hello #second #third"}
+        res = self.client.patch(f"/api/v1/posts/{post.id}/update/", update_data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["hashtags"]), 2)
+        self.assertNotIn("first", res.data["hashtags"])
+        self.assertIn("second", res.data["hashtags"])
+
+    def test_post_soft_deletion(self):
+        post = Post.objects.create(author=self.user, content="To be deleted", post_type="text")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.post_count, 1)
+
+        # Delete post
+        res = self.client.delete(f"/api/v1/posts/{post.id}/delete/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "Post successfully deleted.")
+
+        # Verify soft deleted in DB
+        post.refresh_from_db()
+        self.assertTrue(post.is_deleted)
+
+        # Verify signals decremented post count
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.post_count, 0)
+
+        # Verify detail view returns 404
+        res = self.client.get(f"/api/v1/posts/{post.id}/")
+        self.assertEqual(res.status_code, 404)
+
+    def test_private_profile_feed_privacy(self):
+        # Create private user post
+        post = Post.objects.create(author=self.private_user, content="Private post", post_type="text")
+
+        # Requester is not following private user -> returns 403 Forbidden
+        res = self.client.get(f"/api/v1/posts/{post.id}/")
+        self.assertEqual(res.status_code, 403)
+
+        res = self.client.get(f"/api/v1/users/{self.private_user.id}/posts/")
+        self.assertEqual(res.status_code, 403)
+
+        # Add follow relationship
+        Follow.objects.create(follower=self.user, following=self.private_user)
+
+        res = self.client.get(f"/api/v1/posts/{post.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["content"], "Private post")
+
+
