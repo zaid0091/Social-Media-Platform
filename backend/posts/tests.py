@@ -329,8 +329,11 @@ class PostMediaUploadTests(TestCase):
         self.assertIn("Unsupported file type", res.data["error"])
 
 
+from django.core.cache import cache
+
 class PostLikesAndBookmarksAPITests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.user = User.objects.create_user(
             username="liker",
@@ -758,6 +761,99 @@ class NewsFeedAPITests(TestCase):
 
         res = self.client.get("/api/v1/posts/feed/?feed_type=ranked&refresh=true")
         self.assertEqual(res.data["results"][0]["id"], str(self.post_followers.id))
+
+
+from django.test import TransactionTestCase, override_settings
+from channels.testing import WebsocketCommunicator
+from core.asgi import application
+from rest_framework_simplejwt.tokens import AccessToken
+from channels.db import database_sync_to_async
+from accounts.models import Follow
+from posts.models import Post, Like, Comment
+from django.contrib.contenttypes.models import ContentType
+
+@override_settings(
+    CHANNEL_LAYERS={
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+)
+class RealTimeFeedWebSocketTests(TransactionTestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", email="alice@example.com", password="Password123!", is_active=True)
+        self.bob = User.objects.create_user(username="bob", email="bob@example.com", password="Password123!", is_active=True)
+        
+        Follow.objects.create(follower=self.bob, following=self.alice)
+
+        self.alice_token = str(AccessToken.for_user(self.alice))
+        self.bob_token = str(AccessToken.for_user(self.bob))
+
+    async def test_realtime_feed_notifications_on_post_creation(self):
+        bob_feed_comm = WebsocketCommunicator(
+            application,
+            f"/ws/feed/?token={self.bob_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, _ = await bob_feed_comm.connect()
+        self.assertTrue(connected)
+
+        post = await database_sync_to_async(Post.objects.create)(
+            author=self.alice,
+            content="Hello followers over WebSocket!",
+            post_type="text"
+        )
+        
+        from posts.tasks import fanout_new_post
+        await database_sync_to_async(fanout_new_post)(str(post.id), str(self.alice.id))
+
+        event = await bob_feed_comm.receive_json_from()
+        self.assertEqual(event["type"], "new_post")
+        self.assertEqual(event["post"]["content"], "Hello followers over WebSocket!")
+        self.assertEqual(event["post"]["author"]["username"], "alice")
+
+        await bob_feed_comm.disconnect()
+
+    async def test_realtime_post_engagement_updates(self):
+        post = await database_sync_to_async(Post.objects.create)(
+            author=self.alice,
+            content="Engagement post",
+            post_type="text"
+        )
+
+        engagement_comm = WebsocketCommunicator(
+            application,
+            f"/ws/post-engagement/{post.id}/",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, _ = await engagement_comm.connect()
+        self.assertTrue(connected)
+
+        ct = await database_sync_to_async(ContentType.objects.get_for_model)(Post)
+        await database_sync_to_async(Like.objects.create)(
+            user=self.bob,
+            content_type=ct,
+            object_id=post.id
+        )
+
+        event = await engagement_comm.receive_json_from()
+        self.assertEqual(event["type"], "engagement_update")
+        self.assertEqual(event["likes_count"], 1)
+        self.assertEqual(event["comments_count"], 0)
+
+        await database_sync_to_async(Comment.objects.create)(
+            post=post,
+            author=self.bob,
+            content="Great post!"
+        )
+
+        event2 = await engagement_comm.receive_json_from()
+        self.assertEqual(event2["type"], "engagement_update")
+        self.assertEqual(event2["likes_count"], 1)
+        self.assertEqual(event2["comments_count"], 1)
+
+        await engagement_comm.disconnect()
+
 
 
 

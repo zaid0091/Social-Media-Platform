@@ -1,6 +1,25 @@
+import re
 from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
-from .models import Post
+from django.contrib.contenttypes.models import ContentType
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+from .models import Post, Like, Bookmark, Comment
+from .tasks import fanout_new_post
+from hashtags.models import Hashtag, PostHashtag
+
+def broadcast_post_engagement(post_id, likes_count, comments_count):
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"post_engagement_{post_id}",
+            {
+                "type": "engagement_update",
+                "likes_count": likes_count,
+                "comments_count": comments_count
+            }
+        )
 
 @receiver(post_save, sender=Post)
 def update_user_post_count_on_save(sender, instance, **kwargs):
@@ -10,15 +29,17 @@ def update_user_post_count_on_save(sender, instance, **kwargs):
     author.post_count = active_posts_count
     author.save(update_fields=['post_count'])
 
+    # Phase 26: Asynchronous feed updates fanout
+    created = kwargs.get('created', False)
+    if created and not instance.is_deleted:
+        fanout_new_post.delay(str(instance.id), str(author.id))
+
 @receiver(post_delete, sender=Post)
 def update_user_post_count_on_delete(sender, instance, **kwargs):
     author = instance.author
     active_posts_count = Post.objects.filter(author=author, is_deleted=False).count()
     author.post_count = active_posts_count
     author.save(update_fields=['post_count'])
-
-import re
-from hashtags.models import Hashtag, PostHashtag
 
 @receiver(pre_delete, sender=Post)
 def clean_hashtags_on_post_hard_delete(sender, instance, **kwargs):
@@ -76,10 +97,6 @@ def sync_post_hashtags(sender, instance, **kwargs):
         except Hashtag.DoesNotExist:
             pass
 
-
-from django.contrib.contenttypes.models import ContentType
-from .models import Like, Bookmark, Comment
-
 @receiver([post_save, post_delete], sender=Like)
 def update_like_count_cache(sender, instance, **kwargs):
     content_type = instance.content_type
@@ -87,9 +104,18 @@ def update_like_count_cache(sender, instance, **kwargs):
     try:
         model_class = content_type.model_class()
         target_obj = model_class.objects.get(id=object_id)
+        
         total_likes = Like.objects.filter(content_type=content_type, object_id=object_id).count()
         target_obj.like_count = total_likes
-        target_obj.save(update_fields=['like_count'])
+
+        # Real-time update broadcast
+        if model_class == Post:
+            total_comments = Comment.objects.filter(post=target_obj, is_deleted=False).count()
+            target_obj.comment_count = total_comments
+            target_obj.save(update_fields=['like_count', 'comment_count'])
+            broadcast_post_engagement(str(target_obj.id), total_likes, total_comments)
+        else:
+            target_obj.save(update_fields=['like_count'])
     except Exception:
         pass
 
@@ -104,14 +130,23 @@ def update_bookmark_count_cache(sender, instance, **kwargs):
 def update_comment_counts(sender, instance, **kwargs):
     # Update Post's comment count
     post = instance.post
-    post.comment_count = Comment.objects.filter(post=post, is_deleted=False).count()
-    post.save(update_fields=['comment_count'])
+    
+    # Query direct counts to avoid stale instance attributes
+    likes_count = Like.objects.filter(
+        content_type=ContentType.objects.get_for_model(Post),
+        object_id=post.id
+    ).count()
+    comments_count = Comment.objects.filter(post=post, is_deleted=False).count()
+
+    post.comment_count = comments_count
+    post.like_count = likes_count
+    post.save(update_fields=['comment_count', 'like_count'])
+
+    # Real-time update broadcast
+    broadcast_post_engagement(str(post.id), likes_count, comments_count)
 
     # Update Parent Comment's reply count (if reply)
     if instance.parent:
         parent = instance.parent
         parent.reply_count = Comment.objects.filter(parent=parent, is_deleted=False).count()
         parent.save(update_fields=['reply_count'])
-
-
-
