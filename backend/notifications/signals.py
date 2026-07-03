@@ -62,3 +62,24 @@ def notify_follow_request(sender, instance, created, **kwargs):
             sender=instance.requester,
             notification_type='follow'
         )
+
+from django.contrib.auth import get_user_model
+from .models import UserNotificationPreference
+from messaging.models import DirectMessage
+
+@receiver(post_save, sender=get_user_model())
+def create_user_notification_preferences(sender, instance, created, **kwargs):
+    if created:
+        UserNotificationPreference.objects.get_or_create(user=instance)
+
+@receiver(post_save, sender=DirectMessage)
+def notify_new_message(sender, instance, created, **kwargs):
+    if created:
+        conversation = instance.conversation
+        other_participants = conversation.participants.exclude(id=instance.sender.id)
+        for p in other_participants:
+            create_notification(
+                recipient=p,
+                sender=instance.sender,
+                notification_type='message'
+            )

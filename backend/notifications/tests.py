@@ -247,3 +247,100 @@ class NotificationsWebSocketTests(TransactionTestCase):
         connected, subprotocol = await communicator.connect()
         self.assertFalse(connected)
 
+
+from .models import DeviceToken, UserNotificationPreference
+
+class PushNotificationsTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.alice = User.objects.create_user(
+            username="alice",
+            email="alice@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.bob = User.objects.create_user(
+            username="bob",
+            email="bob@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.alice)
+
+    def test_notification_preference_auto_creation_and_api(self):
+        # 1. Verify auto-creation via User post_save signal
+        pref = UserNotificationPreference.objects.filter(user=self.alice).first()
+        self.assertIsNotNone(pref)
+        self.assertTrue(pref.push_likes)
+        self.assertTrue(pref.push_comments)
+        self.assertTrue(pref.push_follows)
+        self.assertTrue(pref.push_messages)
+
+        # 2. Get preferences via API
+        res = self.client.get("/api/v1/notifications/preferences/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["push_likes"])
+
+        # 3. Update preferences via API (PATCH)
+        res = self.client.patch("/api/v1/notifications/preferences/", {"push_likes": False}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["push_likes"])
+
+        pref.refresh_from_db()
+        self.assertFalse(pref.push_likes)
+
+    def test_device_token_registration(self):
+        # Register a token
+        data = {
+            "token": "mock-fcm-token-12345",
+            "device_type": "web"
+        }
+        res = self.client.post("/api/v1/notifications/devices/register/", data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["token"], "mock-fcm-token-12345")
+        self.assertEqual(res.data["device_type"], "web")
+
+        self.assertTrue(DeviceToken.objects.filter(user=self.alice, token="mock-fcm-token-12345").exists())
+
+        # Update or duplicate registration handles correctly
+        res = self.client.post("/api/v1/notifications/devices/register/", data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(DeviceToken.objects.filter(token="mock-fcm-token-12345").count(), 1)
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_fcm_push_notification_dispatch_logic(self):
+        # Register device token for Bob (recipient)
+        DeviceToken.objects.create(
+            user=self.bob,
+            token="bob-mock-token",
+            device_type="web"
+        )
+
+        # Bob is offline (not in Redis presence)
+        from django_redis import get_redis_connection
+        redis_client = get_redis_connection("default")
+        redis_client.delete(f"presence_user_{self.bob.id}")
+
+        # Trigger notification
+        from notifications.tasks import send_async_notification
+        res_msg = send_async_notification(
+            recipient_id=str(self.bob.id),
+            sender_id=str(self.alice.id),
+            notification_type="like"
+        )
+        self.assertIn("Created notification", res_msg)
+
+        # Check that FCM push was sent (mock logic ran successfully since CELERY_TASK_ALWAYS_EAGER=True)
+        # Verify custom preference toggle inhibits dispatch
+        bob_pref = UserNotificationPreference.objects.get(user=self.bob)
+        bob_pref.push_likes = False
+        bob_pref.save()
+
+        from notifications.models import Notification
+        notif = Notification.objects.filter(recipient=self.bob, notification_type="like").first()
+        
+        from notifications.tasks import send_async_push_notification
+        res = send_async_push_notification(str(notif.id))
+        self.assertEqual(res, "Push notification skipped due to user preference settings")
+
+

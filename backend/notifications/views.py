@@ -14,7 +14,7 @@ class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')
+        notifications = Notification.objects.filter(recipient=request.user).exclude(notification_type='message').order_by('-created_at')
         
         paginator = NotificationPagination()
         result_page = paginator.paginate_queryset(notifications, request)
@@ -60,5 +60,39 @@ class NotificationUnreadCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
-        return Response({"unread_count": count}, status=status.HTTP_200_OK)
+        unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        return Response({"unread_count": unread_count}, status=status.HTTP_200_OK)
+
+
+from .serializers import DeviceTokenSerializer, UserNotificationPreferenceSerializer
+from .models import UserNotificationPreference
+
+class DeviceTokenRegisterView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = DeviceTokenSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserNotificationPreferenceUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        pref, _ = UserNotificationPreference.objects.get_or_create(user=request.user)
+        serializer = UserNotificationPreferenceSerializer(pref)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, *args, **kwargs):
+        pref, _ = UserNotificationPreference.objects.get_or_create(user=request.user)
+        serializer = UserNotificationPreferenceSerializer(pref, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request, *args, **kwargs):
+        return self.patch(request, *args, **kwargs)

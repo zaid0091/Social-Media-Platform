@@ -34,3 +34,29 @@ class Notification(models.Model):
     def __str__(self):
         return f"Notification ({self.notification_type}) from {self.sender.username} to {self.recipient.username}"
 
+
+class DeviceToken(models.Model):
+    DEVICE_TYPE_CHOICES = (
+        ('web', 'Web'),
+        ('android', 'Android'),
+        ('ios', 'iOS'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='device_tokens')
+    token = models.CharField(max_length=500, unique=True)
+    device_type = models.CharField(max_length=10, choices=DEVICE_TYPE_CHOICES, default='web')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_type} token"
+
+
+class UserNotificationPreference(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='notification_preferences')
+    push_likes = models.BooleanField(default=True)
+    push_comments = models.BooleanField(default=True)
+    push_follows = models.BooleanField(default=True)
+    push_messages = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Notification Preferences for {self.user.username}"
+
