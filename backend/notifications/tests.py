@@ -155,3 +155,95 @@ class NotificationsAPITests(TestCase):
         res = self.client.delete(f"/api/v1/notifications/{notif2.id}/delete/")
         self.assertEqual(res.status_code, 200)
         self.assertFalse(Notification.objects.filter(id=notif2.id).exists())
+
+from django.test import TransactionTestCase
+from channels.testing import WebsocketCommunicator
+from core.asgi import application
+from rest_framework_simplejwt.tokens import AccessToken
+from channels.db import database_sync_to_async
+
+@override_settings(
+    CHANNEL_LAYERS={
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+)
+class NotificationsWebSocketTests(TransactionTestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="ws_user",
+            email="ws@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.actor = User.objects.create_user(
+            username="ws_actor",
+            email="actorws@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.token = str(AccessToken.for_user(self.user))
+
+    async def test_websocket_connect_authenticated(self):
+        communicator = WebsocketCommunicator(
+            application, 
+            f"/ws/notifications/?token={self.token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        
+        from notifications.models import Notification
+        notif = await database_sync_to_async(Notification.objects.create)(
+            recipient=self.user,
+            sender=self.actor,
+            notification_type="follow"
+        )
+
+        await communicator.send_json_to({
+            "action": "mark_read",
+            "notification_id": str(notif.id)
+        })
+        
+        response = await communicator.receive_json_from()
+        self.assertEqual(response["status"], "success")
+        
+        updated_notif = await database_sync_to_async(Notification.objects.get)(id=notif.id)
+        self.assertTrue(updated_notif.is_read)
+
+        await communicator.disconnect()
+
+    async def test_websocket_notification_delivery(self):
+        communicator = WebsocketCommunicator(
+            application, 
+            f"/ws/notifications/?token={self.token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+
+        # Trigger notification creation task
+        from notifications.tasks import send_async_notification
+        await database_sync_to_async(send_async_notification)(
+            recipient_id=str(self.user.id),
+            sender_id=str(self.actor.id),
+            notification_type="like"
+        )
+
+        response = await communicator.receive_json_from()
+        self.assertEqual(response["type"], "notification")
+        self.assertEqual(response["notification"]["notification_type"], "like")
+        self.assertEqual(response["notification"]["sender"]["username"], "ws_actor")
+
+        await communicator.disconnect()
+
+    async def test_websocket_connect_anonymous_fails(self):
+        communicator = WebsocketCommunicator(
+            application, 
+            "/ws/notifications/?token=invalid_token",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertFalse(connected)
+

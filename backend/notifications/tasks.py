@@ -56,4 +56,24 @@ def send_async_notification(recipient_id, sender_id, notification_type, related_
         related_comment=related_comment,
         related_story=related_story
     )
+
+    # Broadcast notification to group layer
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    from .serializers import NotificationSerializer
+
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        try:
+            serializer = NotificationSerializer(notification)
+            async_to_sync(channel_layer.group_send)(
+                f"notifications_user_{recipient.id}",
+                {
+                    "type": "notification_message",
+                    "notification": serializer.data
+                }
+            )
+        except Exception:
+            pass
+
     return f"Created notification {notification.id} of type {notification_type}"
