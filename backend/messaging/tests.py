@@ -172,3 +172,115 @@ class MessagingAPITests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res.data["messages"]["results"]), 20)
         self.assertIsNotNone(res.data["messages"]["next"])
+
+
+from django.test import TransactionTestCase, override_settings
+from channels.testing import WebsocketCommunicator
+from core.asgi import application
+from rest_framework_simplejwt.tokens import AccessToken
+from channels.db import database_sync_to_async
+
+@override_settings(
+    CHANNEL_LAYERS={
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+)
+class MessagingWebSocketTests(TransactionTestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", email="alice@example.com", password="Password123!", is_active=True)
+        self.bob = User.objects.create_user(username="bob", email="bob@example.com", password="Password123!", is_active=True)
+        self.charlie = User.objects.create_user(username="charlie", email="charlie@example.com", password="Password123!", is_active=True)
+
+        self.conv = Conversation.objects.create(is_group=False)
+        self.conv.participants.add(self.alice, self.bob)
+
+        self.alice_token = str(AccessToken.for_user(self.alice))
+        self.bob_token = str(AccessToken.for_user(self.bob))
+        self.charlie_token = str(AccessToken.for_user(self.charlie))
+
+    async def test_chat_websocket_connect_auth_and_membership(self):
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.disconnect()
+
+        charlie_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.charlie_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        charlie_connected, _ = await charlie_comm.connect()
+        self.assertFalse(charlie_connected)
+
+    async def test_chat_websocket_send_message_and_persistence(self):
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to({
+            "type": "message",
+            "content": "Hi Bob over WebSocket!",
+            "message_type": "text"
+        })
+
+        response = await communicator.receive_json_from()
+        self.assertEqual(response["type"], "message")
+        self.assertEqual(response["message"]["content"], "Hi Bob over WebSocket!")
+        self.assertEqual(response["message"]["sender"]["username"], "alice")
+
+        from messaging.models import DirectMessage
+        msg_exists = await database_sync_to_async(
+            DirectMessage.objects.filter(conversation=self.conv, content="Hi Bob over WebSocket!").exists
+        )()
+        self.assertTrue(msg_exists)
+
+        await communicator.disconnect()
+
+    async def test_chat_websocket_typing_and_read_receipts(self):
+        alice_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected1, _ = await alice_comm.connect()
+        self.assertTrue(connected1)
+
+        bob_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.bob_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected2, _ = await bob_comm.connect()
+        self.assertTrue(connected2)
+
+        await alice_comm.send_json_to({
+            "type": "typing",
+            "is_typing": True
+        })
+
+        bob_typing_res = await bob_comm.receive_json_from()
+        self.assertEqual(bob_typing_res["type"], "typing")
+        self.assertEqual(bob_typing_res["sender_id"], str(self.alice.id))
+        self.assertTrue(bob_typing_res["is_typing"])
+
+        await bob_comm.send_json_to({
+            "type": "read_receipt"
+        })
+
+        alice_read_res = await alice_comm.receive_json_from()
+        self.assertEqual(alice_read_res["type"], "read_receipt")
+        self.assertEqual(alice_read_res["reader_id"], str(self.bob.id))
+
+        await alice_comm.disconnect()
+        await bob_comm.disconnect()
+
