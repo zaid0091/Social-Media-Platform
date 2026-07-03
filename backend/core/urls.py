@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/v1/stories/", include("stories.urls")),
     path("api/v1/notifications/", include("notifications.urls")),
     path("api/v1/search/", include("search.urls")),
+    path("api/v1/messaging/", include("messaging.urls")),
 ]
 
 if settings.DEBUG:
