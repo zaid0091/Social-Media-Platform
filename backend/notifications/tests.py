@@ -344,3 +344,62 @@ class PushNotificationsTests(TestCase):
         self.assertEqual(res, "Push notification skipped due to user preference settings")
 
 
+from django.core import mail
+
+class EmailNotificationPreferenceTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.alice = User.objects.create_user(
+            username="alice",
+            email="alice@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.bob = User.objects.create_user(
+            username="bob",
+            email="bob@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.alice)
+
+    def test_email_preferences_api(self):
+        # 1. Get email preferences
+        res = self.client.get("/api/v1/notifications/preferences/email/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["email_digest_enabled"])
+        self.assertFalse(res.data["email_likes"])
+
+        # 2. Update email preferences (PATCH)
+        res = self.client.patch("/api/v1/notifications/preferences/email/", {"email_likes": True}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["email_likes"])
+
+        pref = UserNotificationPreference.objects.get(user=self.alice)
+        self.assertTrue(pref.email_likes)
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_daily_email_digest_task(self):
+        # Set preference and create unread notification in the last 24h
+        pref = UserNotificationPreference.objects.get(user=self.alice)
+        pref.email_digest_enabled = True
+        pref.save()
+
+        # Create unread notification for Alice
+        Notification.objects.create(
+            recipient=self.alice,
+            sender=self.bob,
+            notification_type="follow"
+        )
+
+        mail.outbox = []
+        from notifications.tasks import send_daily_email_digest
+        res = send_daily_email_digest()
+        self.assertIn("Enqueued digest emails for 1 users", res)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Your Daily Notification Digest", mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].to, ["alice@example.com"])
+        self.assertIn("started following you", mail.outbox[0].alternatives[0][0])
+
+
+

@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "channels",
+    "anymail",
 
     # Custom apps
     "accounts",
@@ -59,7 +60,7 @@ ROOT_URLCONF = "core.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / 'templates'],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -171,9 +172,16 @@ JWT_COOKIE_HTTPONLY = True
 JWT_COOKIE_SAMESITE = "Lax"
 JWT_COOKIE_NAME = "refresh_token"
 
-# Email Configuration for local development: logs emails to console
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "noreply@socialmedia.local"
+# Email Configuration using Anymail with SendGrid (Console fallback if key is missing)
+ANYMAIL = {
+    "SENDGRID_API_KEY": env("SENDGRID_API_KEY", default=""),
+}
+if ANYMAIL["SENDGRID_API_KEY"]:
+    EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@socialmedia.local")
 
 # Cloudinary media storage configurations
 import cloudinary

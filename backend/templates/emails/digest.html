@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Your Daily Digest</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f6f8; color: #333333; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background-color: #ffffff; border-radius: 8px; padding: 40px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h1 { color: #111111; font-size: 24px; margin-bottom: 20px; text-align: center; }
+        p { font-size: 16px; line-height: 1.6; color: #555555; }
+        ul { padding-left: 20px; margin: 20px 0; }
+        li { font-size: 15px; margin-bottom: 10px; color: #444444; line-height: 1.4; }
+        .footer { margin-top: 40px; font-size: 12px; color: #999999; text-align: center; border-top: 1px solid #eeeeee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Your Daily Notification Digest</h1>
+        <p>Hi {{ username }},</p>
+        <p>Here is a summary of your unread notifications on Social Media Platform from the past 24 hours:</p>
+        <ul>
+            {% for item in notifications %}
+                <li>{{ item.text }}</li>
+            {% empty %}
+                <li>No new unread notifications.</li>
+            {% endfor %}
+        </ul>
+        <p>Visit your dashboard to view them or modify your notification settings.</p>
+        <p>Best regards,<br>The Team</p>
+        <div class="footer">
+            <p>&copy; 2026 Social Media Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

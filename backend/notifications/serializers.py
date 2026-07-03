@@ -66,3 +66,10 @@ class UserNotificationPreferenceSerializer(serializers.ModelSerializer):
         model = UserNotificationPreference
         fields = ('push_likes', 'push_comments', 'push_follows', 'push_messages')
 
+
+class EmailPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserNotificationPreference
+        fields = ('email_digest_enabled', 'email_likes', 'email_comments', 'email_follows', 'email_messages')
+
+

@@ -30,15 +30,18 @@ class RegisterView(APIView):
                 reverse('verify-email') + f"?token={token}"
             )
 
-            # Dispatch confirmation email
-            subject = "Verify Your Social Media Platform Account"
-            message = f"Hi {user.username},\n\nPlease verify your account by clicking the link below (valid for 24 hours):\n\n{verify_url}"
-            send_mail(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
+            # Dispatch confirmation email asynchronously using celery and template
+            from django.template.loader import render_to_string
+            from notifications.tasks import send_async_email
+
+            html_content = render_to_string("emails/verification.html", {
+                "username": user.username,
+                "verify_url": verify_url
+            })
+            send_async_email.delay(
+                subject="Verify Your Social Media Platform Account",
+                html_content=html_content,
+                recipient_list=[user.email]
             )
 
             return Response({
@@ -66,6 +69,20 @@ class VerifyEmailView(APIView):
 
             user.is_active = True
             user.save()
+
+            # Send welcome email asynchronously using celery
+            from django.template.loader import render_to_string
+            from notifications.tasks import send_async_email
+
+            html_content = render_to_string("emails/welcome.html", {
+                "username": user.username
+            })
+            send_async_email.delay(
+                subject="Welcome to Social Media Platform!",
+                html_content=html_content,
+                recipient_list=[user.email]
+            )
+
             return Response({"message": "Email verified successfully! You can now log in."}, status=status.HTTP_200_OK)
             
         except SignatureExpired:
@@ -97,6 +114,43 @@ class LoginView(APIView):
         if user is not None:
             if not user.is_active:
                 return Response({"error": "Please verify your email before logging in."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get user agent and IP address
+            user_agent = request.META.get('HTTP_USER_AGENT', '')
+            ip_address = request.META.get('REMOTE_ADDR', '')
+
+            # Check if this device is already registered for the user
+            from .models import UserDevice
+            device_exists = UserDevice.objects.filter(
+                user=user,
+                user_agent=user_agent
+            ).exists()
+
+            if not device_exists:
+                # Log the device
+                UserDevice.objects.create(
+                    user=user,
+                    user_agent=user_agent,
+                    ip_address=ip_address
+                )
+
+                # Send security alert email asynchronously using celery and template
+                from django.template.loader import render_to_string
+                from notifications.tasks import send_async_email
+                from django.utils import timezone
+
+                login_time = timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+                html_content = render_to_string("emails/security_alert.html", {
+                    "username": user.username,
+                    "user_agent": user_agent,
+                    "ip_address": ip_address,
+                    "login_time": login_time
+                })
+                send_async_email.delay(
+                    subject="Security Alert: New Device Login Detected",
+                    html_content=html_content,
+                    recipient_list=[user.email]
+                )
 
             refresh = RefreshToken.for_user(user)
             response = Response({
@@ -505,6 +559,77 @@ class GetUserPresenceView(APIView):
             "is_online": is_online,
             "last_seen": target_user.last_seen
         }, status=status.HTTP_200_OK)
+
+
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+
+class PasswordResetRequestView(APIView):
+    permission_classes = []  # AllowAny
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email__iexact=email, is_active=True)
+            
+            # Generate token and encoded user ID
+            token = default_token_generator.make_token(user)
+            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # Build reset confirmation URL
+            reset_url = request.build_absolute_uri(
+                reverse('password-reset-confirm') + f"?uidb64={uidb64}&token={token}"
+            )
+            
+            # Send password reset email asynchronously
+            from django.template.loader import render_to_string
+            from notifications.tasks import send_async_email
+            
+            html_content = render_to_string("emails/password_reset.html", {
+                "username": user.username,
+                "reset_url": reset_url
+            })
+            send_async_email.delay(
+                subject="Password Reset Request",
+                html_content=html_content,
+                recipient_list=[user.email]
+            )
+        except User.DoesNotExist:
+            pass
+
+        return Response({
+            "message": "If an account exists with this email, a password reset link has been sent."
+        }, status=status.HTTP_200_OK)
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = []  # AllowAny
+
+    def post(self, request, *args, **kwargs):
+        uidb64 = request.data.get('uidb64') or request.query_params.get('uidb64')
+        token = request.data.get('token') or request.query_params.get('token')
+        new_password = request.data.get('new_password')
+
+        if not uidb64 or not token or not new_password:
+            return Response({"error": "uidb64, token, and new_password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid, is_active=True)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({"error": "Invalid or expired reset link."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if default_token_generator.check_token(user, token):
+            user.set_password(new_password)
+            user.save()
+            return Response({"message": "Password has been reset successfully."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Invalid or expired reset link."}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Security Alert: New Device Login</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f6f8; color: #333333; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background-color: #ffffff; border-radius: 8px; padding: 40px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h1 { color: #dc3545; font-size: 24px; margin-bottom: 20px; text-align: center; }
+        p { font-size: 16px; line-height: 1.6; color: #555555; }
+        .details-box { background-color: #f8f9fa; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 4px; }
+        .details-box p { margin: 5px 0; font-size: 14px; color: #333333; }
+        .footer { margin-top: 40px; font-size: 12px; color: #999999; text-align: center; border-top: 1px solid #eeeeee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>New Device Login Detected</h1>
+        <p>Hi {{ username }},</p>
+        <p>We noticed a login to your account from a new or unrecognized device.</p>
+        <div class="details-box">
+            <p><strong>Device / Browser:</strong> {{ user_agent }}</p>
+            <p><strong>IP Address:</strong> {{ ip_address }}</p>
+            <p><strong>Date & Time:</strong> {{ login_time }}</p>
+        </div>
+        <p>If this was you, you can safely ignore this email. You do not need to take any action.</p>
+        <p><strong>If this was not you</strong>, please secure your account immediately by changing your password.</p>
+        <p>Best regards,<br>The Security Team</p>
+        <div class="footer">
+            <p>&copy; 2026 Social Media Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

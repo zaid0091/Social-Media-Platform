@@ -84,3 +84,14 @@ class BlockedUser(models.Model):
     def __str__(self):
         return f"{self.blocker} blocked {self.blocked}"
 
+
+class UserDevice(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='devices')
+    user_agent = models.TextField()
+    ip_address = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} device login from {self.ip_address}"
+
+

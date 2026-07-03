@@ -484,6 +484,120 @@ class PresenceWebSocketTests(TransactionTestCase):
         await alice_comm.disconnect()
 
 
+from django.core import mail
+from accounts.models import UserDevice
+
+class EmailSystemTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_data = {
+            "username": "tester",
+            "email": "tester@example.com",
+            "password": "Password123!",
+            "password_confirm": "Password123!",
+            "full_name": "Test User"
+        }
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_registration_and_verification_emails(self):
+        # 1. Register -> verification email enqueued and sent
+        mail.outbox = []
+        res = self.client.post("/api/v1/auth/register/", self.register_data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Verify Your Social Media Platform Account", mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].to, ["tester@example.com"])
+        self.assertIn("verify-email", mail.outbox[0].alternatives[0][0])
+
+        # Extract token
+        from django.core.signing import TimestampSigner
+        user = User.objects.get(username="tester")
+        signer = TimestampSigner()
+        token = signer.sign(user.email)
+
+        # 2. Verify -> welcome email sent
+        mail.outbox = []
+        res = self.client.get(f"/api/v1/auth/verify-email/?token={token}")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Welcome to Social Media Platform!", mail.outbox[0].subject)
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_password_reset_flow(self):
+        user = User.objects.create_user(
+            username="reset_user",
+            email="reset@example.com",
+            password="OldPassword123!",
+            is_active=True
+        )
+
+        # 1. Request Reset -> reset email sent
+        mail.outbox = []
+        res = self.client.post("/api/v1/auth/password-reset/", {"email": "reset@example.com"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Password Reset Request", mail.outbox[0].subject)
+
+        # Retrieve link from email to get uidb64 and token
+        body = mail.outbox[0].alternatives[0][0]
+        import re
+        uidb64_match = re.search(r'uidb64=([^&"\s]+)', body)
+        token_match = re.search(r'token=([^&"\s]+)', body)
+        self.assertIsNotNone(uidb64_match)
+        self.assertIsNotNone(token_match)
+        uidb64 = uidb64_match.group(1)
+        token = token_match.group(1)
+
+        # 2. Confirm Reset
+        res = self.client.post("/api/v1/auth/password-reset/confirm/", {
+            "uidb64": uidb64,
+            "token": token,
+            "new_password": "NewPassword123!"
+        }, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # Verify password updated
+        from django.contrib.auth import authenticate
+        authenticated_user = authenticate(username="reset_user", password="NewPassword123!")
+        self.assertIsNotNone(authenticated_user)
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_unrecognized_device_login_alert(self):
+        user = User.objects.create_user(
+            username="device_user",
+            email="device@example.com",
+            password="Password123!",
+            is_active=True
+        )
+
+        # 1. Login with a user agent
+        mail.outbox = []
+        headers = {
+            "HTTP_USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "REMOTE_ADDR": "192.168.1.50"
+        }
+        res = self.client.post("/api/v1/auth/login/", {
+            "username": "device_user",
+            "password": "Password123!"
+        }, format="json", **headers)
+        self.assertEqual(res.status_code, 200)
+        
+        # Verify device record created and email sent
+        self.assertTrue(UserDevice.objects.filter(user=user, user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)").exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Security Alert", mail.outbox[0].subject)
+
+        # 2. Login again with same user agent -> no new email sent
+        mail.outbox = []
+        res = self.client.post("/api/v1/auth/login/", {
+            "username": "device_user",
+            "password": "Password123!"
+        }, format="json", **headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+
+
+
 
 
 

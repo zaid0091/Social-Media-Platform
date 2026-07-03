@@ -6,7 +6,7 @@ from .views import (
     DeleteAccountView, UserSearchView, UserSuggestionView,
     FollowView, UnfollowView, FollowRequestListView, FollowRequestActionView,
     FollowerListView, FollowingListView, BlockUserView, UnblockUserView, BlockedUserListView,
-    GetUserPresenceView
+    GetUserPresenceView, PasswordResetRequestView, PasswordResetConfirmView
 )
 
 urlpatterns = [
@@ -15,6 +15,8 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('token/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
+    path('password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     
     # User Profile management endpoints
     path('profile/', UserProfileView.as_view(), name='user-profile'),

@@ -157,3 +157,76 @@ def send_async_push_notification(notification_id):
         return f"Successfully sent push to {sent_count} of {tokens.count()} devices"
     except Exception as e:
         return f"Error sending push: {e}"
+
+
+from django.core.mail import EmailMultiAlternatives
+from django.utils.html import strip_tags
+from django.conf import settings
+from django.utils import timezone
+from datetime import timedelta
+from django.template.loader import render_to_string
+
+@shared_task
+def send_async_email(subject, html_content, recipient_list, text_content=None, from_email=None):
+    if not from_email:
+        from_email = settings.DEFAULT_FROM_EMAIL
+    if not text_content:
+        text_content = strip_tags(html_content)
+
+    msg = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
+    msg.attach_alternative(html_content, "text/html")
+    msg.send()
+    return f"Email sent successfully to {recipient_list}"
+
+
+@shared_task
+def send_daily_email_digest():
+    from .models import UserNotificationPreference
+    # Select users with daily email digest enabled
+    prefs = UserNotificationPreference.objects.filter(email_digest_enabled=True)
+    sent_count = 0
+
+    cutoff = timezone.now() - timedelta(days=1)
+
+    for pref in prefs:
+        user = pref.user
+        # Find unread notifications in the past 24 hours
+        unreads = Notification.objects.filter(
+            recipient=user,
+            is_read=False,
+            created_at__gte=cutoff
+        )
+
+        if unreads.exists():
+            notifications_data = []
+            for n in unreads:
+                sender_name = n.sender.username if n.sender else "Someone"
+                text = f"New notification of type '{n.notification_type}' from {sender_name}."
+                if n.notification_type == 'like':
+                    text = f"{sender_name} liked your post."
+                elif n.notification_type == 'comment':
+                    text = f"{sender_name} commented on your post."
+                elif n.notification_type == 'follow':
+                    text = f"{sender_name} started following you."
+                elif n.notification_type == 'message':
+                    text = f"{sender_name} sent you a message."
+                elif n.notification_type == 'mention':
+                    text = f"{sender_name} mentioned you in a post."
+                
+                notifications_data.append({"text": text})
+
+            html_content = render_to_string("emails/digest.html", {
+                "username": user.username,
+                "notifications": notifications_data
+            })
+
+            subject = "Your Daily Notification Digest"
+            send_async_email.delay(
+                subject=subject,
+                html_content=html_content,
+                recipient_list=[user.email]
+            )
+            sent_count += 1
+
+    return f"Enqueued digest emails for {sent_count} users"
+

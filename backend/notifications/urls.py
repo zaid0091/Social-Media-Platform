@@ -2,7 +2,8 @@ from django.urls import path
 from .views import (
     NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
     NotificationDeleteView, NotificationUnreadCountView,
-    DeviceTokenRegisterView, UserNotificationPreferenceUpdateView
+    DeviceTokenRegisterView, UserNotificationPreferenceUpdateView,
+    UserEmailPreferenceUpdateView
 )
 
 urlpatterns = [
@@ -14,4 +15,5 @@ urlpatterns = [
     
     path('devices/register/', DeviceTokenRegisterView.as_view(), name='device-token-register'),
     path('preferences/', UserNotificationPreferenceUpdateView.as_view(), name='notification-preferences-update'),
+    path('preferences/email/', UserEmailPreferenceUpdateView.as_view(), name='email-preferences-update'),
 ]

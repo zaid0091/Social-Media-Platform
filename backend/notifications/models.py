@@ -57,6 +57,13 @@ class UserNotificationPreference(models.Model):
     push_follows = models.BooleanField(default=True)
     push_messages = models.BooleanField(default=True)
 
+    # Email preferences
+    email_digest_enabled = models.BooleanField(default=True)
+    email_likes = models.BooleanField(default=False)
+    email_comments = models.BooleanField(default=False)
+    email_follows = models.BooleanField(default=False)
+    email_messages = models.BooleanField(default=False)
+
     def __str__(self):
         return f"Notification Preferences for {self.user.username}"
 

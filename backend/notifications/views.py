@@ -96,3 +96,26 @@ class UserNotificationPreferenceUpdateView(APIView):
 
     def put(self, request, *args, **kwargs):
         return self.patch(request, *args, **kwargs)
+
+
+from .serializers import EmailPreferenceSerializer
+
+class UserEmailPreferenceUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        pref, _ = UserNotificationPreference.objects.get_or_create(user=request.user)
+        serializer = EmailPreferenceSerializer(pref)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, *args, **kwargs):
+        pref, _ = UserNotificationPreference.objects.get_or_create(user=request.user)
+        serializer = EmailPreferenceSerializer(pref, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request, *args, **kwargs):
+        return self.patch(request, *args, **kwargs)
+
