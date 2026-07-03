@@ -8,6 +8,15 @@ from .views import (
     MessageCreateView,
     MessageDeleteView,
     MessageReadView,
+    MessageMediaUploadView,
+    MessageReactionView,
+    AddParticipantView,
+    RemoveParticipantView,
+    LeaveGroupView,
+    GroupAdminView,
+    ConversationMuteView,
+    MessageForwardView,
+    ConversationMessageSearchView,
 )
 
 urlpatterns = [
@@ -19,4 +28,15 @@ urlpatterns = [
     path('messages/', MessageCreateView.as_view(), name='message-create'),
     path('messages/<uuid:pk>/', MessageDeleteView.as_view(), name='message-delete'),
     path('messages/<uuid:pk>/read/', MessageReadView.as_view(), name='message-read'),
+    
+    # Phase 25 urls
+    path('messages/upload-media/', MessageMediaUploadView.as_view(), name='message-media-upload'),
+    path('messages/<uuid:message_id>/reaction/', MessageReactionView.as_view(), name='message-reaction'),
+    path('messages/<uuid:message_id>/forward/', MessageForwardView.as_view(), name='message-forward'),
+    path('conversations/<uuid:conversation_id>/add-participant/', AddParticipantView.as_view(), name='conversation-add-participant'),
+    path('conversations/<uuid:conversation_id>/remove-participant/', RemoveParticipantView.as_view(), name='conversation-remove-participant'),
+    path('conversations/<uuid:conversation_id>/leave/', LeaveGroupView.as_view(), name='conversation-leave'),
+    path('conversations/<uuid:conversation_id>/admin-action/', GroupAdminView.as_view(), name='conversation-admin-action'),
+    path('conversations/<uuid:conversation_id>/mute/', ConversationMuteView.as_view(), name='conversation-mute'),
+    path('conversations/<uuid:conversation_id>/search/', ConversationMessageSearchView.as_view(), name='conversation-search'),
 ]

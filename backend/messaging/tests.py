@@ -284,3 +284,250 @@ class MessagingWebSocketTests(TransactionTestCase):
         await alice_comm.disconnect()
         await bob_comm.disconnect()
 
+    async def test_chat_websocket_replies_and_reactions(self):
+        alice_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        await alice_comm.connect()
+
+        bob_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{self.conv.id}/?token={self.bob_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        await bob_comm.connect()
+
+        # Alice sends message
+        await alice_comm.send_json_to({
+            "type": "message",
+            "content": "Original message"
+        })
+
+        res_msg = await alice_comm.receive_json_from()
+        msg_id = res_msg["message"]["id"]
+
+        # Bob receives original message
+        res_bob_msg = await bob_comm.receive_json_from()
+        self.assertEqual(res_bob_msg["message"]["id"], msg_id)
+
+        # Bob replies to Alice's message
+        await bob_comm.send_json_to({
+            "type": "message",
+            "content": "This is a reply!",
+            "replied_to_id": msg_id
+        })
+
+        # Alice receives reply
+        res_reply = await alice_comm.receive_json_from()
+        self.assertEqual(res_reply["message"]["content"], "This is a reply!")
+        self.assertEqual(res_reply["message"]["replied_to"]["id"], msg_id)
+
+        # Bob sends reaction
+        await bob_comm.send_json_to({
+            "type": "reaction",
+            "message_id": msg_id,
+            "emoji": "😂"
+        })
+
+        # Alice receives reaction
+        res_react = await alice_comm.receive_json_from()
+        self.assertEqual(res_react["type"], "reaction")
+        self.assertEqual(res_react["message_id"], msg_id)
+        self.assertEqual(res_react["emoji"], "😂")
+        self.assertEqual(res_react["action"], "added")
+
+        await alice_comm.disconnect()
+        await bob_comm.disconnect()
+
+    async def test_chat_websocket_group_management(self):
+        # Create group conversation
+        group = await database_sync_to_async(Conversation.objects.create)(
+            is_group=True,
+            group_name="WebSocket Group",
+            created_by=self.alice
+        )
+        await database_sync_to_async(group.participants.add)(self.alice, self.bob)
+        await database_sync_to_async(group.admins.add)(self.alice)
+
+        alice_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{group.id}/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        await alice_comm.connect()
+
+        bob_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{group.id}/?token={self.bob_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        await bob_comm.connect()
+
+        # Alice adds Charlie
+        await alice_comm.send_json_to({
+            "type": "add_participant",
+            "user_id": str(self.charlie.id)
+        })
+
+        # Bob receives participant added broadcast
+        res_add = await bob_comm.receive_json_from()
+        self.assertEqual(res_add["type"], "participant_added")
+        self.assertEqual(res_add["user_id"], str(self.charlie.id))
+
+        # Alice also receives participant added in her own queue, drain it
+        await alice_comm.receive_json_from()
+
+        # Alice promotes Bob
+        await alice_comm.send_json_to({
+            "type": "admin_action",
+            "user_id": str(self.bob.id),
+            "action": "promote"
+        })
+
+        res_promo = await bob_comm.receive_json_from()
+        self.assertEqual(res_promo["type"], "admin_action")
+        self.assertEqual(res_promo["user_id"], str(self.bob.id))
+        self.assertEqual(res_promo["action"], "promote")
+
+        # Alice also receives admin action in her own queue, drain it
+        await alice_comm.receive_json_from()
+
+        # Bob leaves group
+        await bob_comm.send_json_to({
+            "type": "leave_group"
+        })
+
+        res_leave = await alice_comm.receive_json_from()
+        self.assertEqual(res_leave["type"], "participant_left")
+        self.assertEqual(res_leave["user_id"], str(self.bob.id))
+
+        await alice_comm.disconnect()
+        await bob_comm.disconnect()
+
+
+from unittest.mock import patch
+import tempfile
+
+class MessagingPhase25RestTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.alice = User.objects.create_user(username="alice", email="alice@example.com", password="Password123!", is_active=True)
+        self.bob = User.objects.create_user(username="bob", email="bob@example.com", password="Password123!", is_active=True)
+        self.charlie = User.objects.create_user(username="charlie", email="charlie@example.com", password="Password123!", is_active=True)
+        self.client.force_authenticate(user=self.alice)
+
+    @patch('messaging.views.upload_file_to_cloudinary')
+    def test_message_media_upload(self, mock_upload):
+        mock_upload.return_value = {
+            "secure_url": "https://res.cloudinary.com/demo/image/upload/chat.jpg",
+            "resource_type": "image",
+            "public_id": "chat_file",
+            "thumbnail_url": ""
+        }
+        with tempfile.NamedTemporaryFile(suffix=".jpg") as temp_file:
+            temp_file.write(b"dummy image data")
+            temp_file.seek(0)
+            res = self.client.post("/api/v1/messaging/messages/upload-media/", {"file": temp_file}, format="multipart")
+            self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(res.data["media_url"], "https://res.cloudinary.com/demo/image/upload/chat.jpg")
+
+    def test_message_replies_and_reactions(self):
+        conv = Conversation.objects.create(is_group=False)
+        conv.participants.add(self.alice, self.bob)
+
+        # Alice posts a message
+        msg1 = DirectMessage.objects.create(sender=self.alice, conversation=conv, content="Hello Bob!")
+
+        # Bob replies to Alice
+        self.client.force_authenticate(user=self.bob)
+        res_reply = self.client.post("/api/v1/messaging/messages/", {
+            "conversation_id": str(conv.id),
+            "content": "Hi Alice! This is a reply",
+            "replied_to_id": str(msg1.id)
+        }, format="json")
+        self.assertEqual(res_reply.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res_reply.data["replied_to"]["id"], str(msg1.id))
+
+        # Bob reacts to Alice's message
+        res_react1 = self.client.post(f"/api/v1/messaging/messages/{msg1.id}/reaction/", {"emoji": "🔥"}, format="json")
+        self.assertEqual(res_react1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_react1.data["status"], "added")
+
+        # Bob toggles reaction off
+        res_react2 = self.client.post(f"/api/v1/messaging/messages/{msg1.id}/reaction/", {"emoji": "🔥"}, format="json")
+        self.assertEqual(res_react2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_react2.data["status"], "removed")
+
+    def test_group_conversation_participant_and_admin_management(self):
+        # Alice creates group
+        conv = Conversation.objects.create(is_group=True, group_name="REST Group", created_by=self.alice)
+        conv.participants.add(self.alice, self.bob)
+        conv.admins.add(self.alice)
+
+        # Alice adds Charlie
+        res_add = self.client.post(f"/api/v1/messaging/conversations/{conv.id}/add-participant/", {"user_id": str(self.charlie.id)}, format="json")
+        self.assertEqual(res_add.status_code, status.HTTP_200_OK)
+        self.assertTrue(conv.participants.filter(id=self.charlie.id).exists())
+
+        # Bob (non-admin) tries to add someone (should fail)
+        self.client.force_authenticate(user=self.bob)
+        res_add_fail = self.client.post(f"/api/v1/messaging/conversations/{conv.id}/add-participant/", {"user_id": str(self.alice.id)}, format="json")
+        self.assertEqual(res_add_fail.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Alice promotes Bob to admin
+        self.client.force_authenticate(user=self.alice)
+        res_promo = self.client.post(f"/api/v1/messaging/conversations/{conv.id}/admin-action/", {"user_id": str(self.bob.id), "action": "promote"}, format="json")
+        self.assertEqual(res_promo.status_code, status.HTTP_200_OK)
+        self.assertTrue(conv.admins.filter(id=self.bob.id).exists())
+
+        # Alice demotes Bob
+        res_demo = self.client.post(f"/api/v1/messaging/conversations/{conv.id}/admin-action/", {"user_id": str(self.bob.id), "action": "demote"}, format="json")
+        self.assertEqual(res_demo.status_code, status.HTTP_200_OK)
+        self.assertFalse(conv.admins.filter(id=self.bob.id).exists())
+
+        # Alice removes Bob
+        res_remove = self.client.post(f"/api/v1/messaging/conversations/{conv.id}/remove-participant/", {"user_id": str(self.bob.id)}, format="json")
+        self.assertEqual(res_remove.status_code, status.HTTP_200_OK)
+        self.assertFalse(conv.participants.filter(id=self.bob.id).exists())
+
+        # Charlie leaves
+        self.client.force_authenticate(user=self.charlie)
+        res_leave = self.client.post(f"/api/v1/messaging/conversations/{conv.id}/leave/", format="json")
+        self.assertEqual(res_leave.status_code, status.HTTP_200_OK)
+        self.assertFalse(conv.participants.filter(id=self.charlie.id).exists())
+
+    def test_conversation_mute_and_message_forward(self):
+        conv1 = Conversation.objects.create(is_group=False)
+        conv1.participants.add(self.alice, self.bob)
+
+        conv2 = Conversation.objects.create(is_group=False)
+        conv2.participants.add(self.alice, self.charlie)
+
+        msg = DirectMessage.objects.create(sender=self.alice, conversation=conv1, content="Forward me!")
+
+        # Mute conv1
+        res_mute = self.client.post(f"/api/v1/messaging/conversations/{conv1.id}/mute/", format="json")
+        self.assertEqual(res_mute.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_mute.data["is_muted"])
+
+        # Forward message to conv2
+        res_fwd = self.client.post(f"/api/v1/messaging/messages/{msg.id}/forward/", {"target_conversation_id": str(conv2.id)}, format="json")
+        self.assertEqual(res_fwd.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res_fwd.data["content"], "[Forwarded] Forward me!")
+
+    def test_conversation_message_search(self):
+        conv = Conversation.objects.create(is_group=False)
+        conv.participants.add(self.alice, self.bob)
+
+        DirectMessage.objects.create(sender=self.alice, conversation=conv, content="Hello Bob")
+        DirectMessage.objects.create(sender=self.alice, conversation=conv, content="Top Secret Key")
+        DirectMessage.objects.create(sender=self.alice, conversation=conv, content="Goodbye Bob")
+
+        res = self.client.get(f"/api/v1/messaging/conversations/{conv.id}/search/?q=Secret")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data["results"]), 1)
+        self.assertEqual(res.data["results"][0]["content"], "Top Secret Key")
+
+

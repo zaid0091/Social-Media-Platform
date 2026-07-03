@@ -13,6 +13,10 @@ class Conversation(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_groups')
     created_at = models.DateTimeField(auto_now_add=True)
     last_message = models.ForeignKey('DirectMessage', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    
+    # New fields for Phase 25
+    muted_by = models.ManyToManyField(User, related_name='muted_conversations', blank=True)
+    admins = models.ManyToManyField(User, related_name='administered_groups', blank=True)
 
     def __str__(self):
         if self.is_group and self.group_name:
@@ -37,7 +41,21 @@ class DirectMessage(models.Model):
     is_deleted_for_sender = models.BooleanField(default=False)
     is_deleted_for_receiver = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    # New field for Phase 25
+    replied_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
 
     def __str__(self):
         return f"Message by {self.sender.username} in Conv {self.conversation.id}"
 
+class MessageReaction(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    message = models.ForeignKey(DirectMessage, on_delete=models.CASCADE, related_name='reactions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='message_reactions')
+    emoji = models.CharField(max_length=50)
+
+    class Meta:
+        unique_together = ('message', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} reacted with {self.emoji} to message {self.message.id}"
