@@ -42,13 +42,14 @@ class ConversationSerializer(serializers.ModelSerializer):
     last_message = MessageSerializer(read_only=True)
     unread_count = serializers.SerializerMethodField()
     is_muted = serializers.SerializerMethodField()
+    is_typing = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = (
             'id', 'participants', 'admins', 'is_group', 'group_name', 
             'group_avatar', 'created_by', 'created_at', 
-            'last_message', 'unread_count', 'is_muted'
+            'last_message', 'unread_count', 'is_muted', 'is_typing'
         )
         read_only_fields = ('id', 'participants', 'admins', 'is_group', 'created_by', 'created_at', 'last_message')
 
@@ -62,4 +63,19 @@ class ConversationSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return obj.muted_by.filter(id=request.user.id).exists()
+        return False
+
+    def get_is_typing(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        other_participants = obj.participants.exclude(id=request.user.id)
+        from django_redis import get_redis_connection
+        try:
+            redis_client = get_redis_connection("default")
+            for p in other_participants:
+                if redis_client.exists(f"typing_user_{p.id}_{obj.id}"):
+                    return True
+        except Exception:
+            pass
         return False

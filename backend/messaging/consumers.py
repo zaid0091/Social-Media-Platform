@@ -97,6 +97,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             elif action == 'typing':
                 is_typing = data.get('is_typing', False)
+                
+                from django_redis import get_redis_connection
+                try:
+                    redis_client = get_redis_connection("default")
+                    typing_key = f"typing_user_{self.user.id}_{self.conversation_id}"
+                    if is_typing:
+                        redis_client.setex(typing_key, 5, "true")
+                    else:
+                        redis_client.delete(typing_key)
+                except Exception:
+                    pass
+
                 await self.channel_layer.group_send(
                     self.group_name,
                     {
@@ -411,4 +423,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "type": "participant_left",
             "user_id": event["user_id"]
+        }, cls=DjangoJSONEncoder))
+
+    async def chat_presence_update(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "presence_update",
+            "user_id": event["user_id"],
+            "status": event["status"]
         }, cls=DjangoJSONEncoder))

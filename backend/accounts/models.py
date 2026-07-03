@@ -31,6 +31,7 @@ class User(AbstractUser):
     follower_count = models.IntegerField(default=0)
     following_count = models.IntegerField(default=0)
     post_count = models.IntegerField(default=0)
+    last_seen = models.DateTimeField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

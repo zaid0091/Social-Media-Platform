@@ -490,3 +490,21 @@ class BlockedUserListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+from django.shortcuts import get_object_or_404
+from django_redis import get_redis_connection
+
+class GetUserPresenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id, *args, **kwargs):
+        target_user = get_object_or_404(User, id=user_id, is_active=True)
+        redis_client = get_redis_connection("default")
+        is_online = redis_client.exists(f"presence_user_{target_user.id}") > 0
+        return Response({
+            "user_id": str(target_user.id),
+            "is_online": is_online,
+            "last_seen": target_user.last_seen
+        }, status=status.HTTP_200_OK)
+
+
+

@@ -5,7 +5,8 @@ from .views import (
     UserProfileView, PublicProfileView, ChangePasswordView,
     DeleteAccountView, UserSearchView, UserSuggestionView,
     FollowView, UnfollowView, FollowRequestListView, FollowRequestActionView,
-    FollowerListView, FollowingListView, BlockUserView, UnblockUserView, BlockedUserListView
+    FollowerListView, FollowingListView, BlockUserView, UnblockUserView, BlockedUserListView,
+    GetUserPresenceView
 )
 
 urlpatterns = [
@@ -34,6 +35,7 @@ urlpatterns = [
     path('block/<uuid:user_id>/', BlockUserView.as_view(), name='block-user'),
     path('unblock/<uuid:user_id>/', UnblockUserView.as_view(), name='unblock-user'),
     path('blocks/', BlockedUserListView.as_view(), name='blocked-users-list'),
+    path('presence/<uuid:user_id>/', GetUserPresenceView.as_view(), name='user-presence'),
 ]
 
 from posts.views import UserPostListView

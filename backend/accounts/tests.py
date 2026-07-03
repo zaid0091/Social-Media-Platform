@@ -361,5 +361,129 @@ class AccountsFollowSystemTests(TestCase):
         self.assertEqual(res.status_code, 404)
 
 
+from django.test import TransactionTestCase, override_settings
+from channels.testing import WebsocketCommunicator
+from core.asgi import application
+from rest_framework_simplejwt.tokens import AccessToken
+from channels.db import database_sync_to_async
+from django_redis import get_redis_connection
+from rest_framework.test import APIClient
+from messaging.models import Conversation
+
+@override_settings(
+    CHANNEL_LAYERS={
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+)
+class PresenceWebSocketTests(TransactionTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.alice = User.objects.create_user(username="alice", email="alice@example.com", password="Password123!", is_active=True)
+        self.bob = User.objects.create_user(username="bob", email="bob@example.com", password="Password123!", is_active=True)
+        
+        Follow.objects.create(follower=self.bob, following=self.alice)
+
+        self.alice_token = str(AccessToken.for_user(self.alice))
+        self.bob_token = str(AccessToken.for_user(self.bob))
+        
+        self.client.force_authenticate(user=self.alice)
+
+    async def test_presence_flow_and_heartbeat(self):
+        redis_client = get_redis_connection("default")
+        redis_client.delete(f"presence_user_{self.alice.id}")
+        redis_client.srem("online_users", str(self.alice.id))
+
+        comm = WebsocketCommunicator(
+            application,
+            f"/ws/presence/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        is_online_key = await database_sync_to_async(redis_client.exists)(f"presence_user_{self.alice.id}")
+        self.assertTrue(is_online_key)
+        
+        is_in_set = await database_sync_to_async(redis_client.sismember)("online_users", str(self.alice.id))
+        self.assertTrue(is_in_set)
+
+        await comm.send_json_to({"type": "ping"})
+        response = await comm.receive_json_from()
+        self.assertEqual(response["type"], "pong")
+
+        res = await database_sync_to_async(self.client.get)(f"/api/v1/users/presence/{self.alice.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["is_online"])
+
+        await comm.disconnect()
+
+        is_online_key_after = await database_sync_to_async(redis_client.exists)(f"presence_user_{self.alice.id}")
+        self.assertFalse(is_online_key_after)
+
+        is_in_set_after = await database_sync_to_async(redis_client.sismember)("online_users", str(self.alice.id))
+        self.assertFalse(is_in_set_after)
+
+        await database_sync_to_async(self.alice.refresh_from_db)()
+        self.assertIsNotNone(self.alice.last_seen)
+
+    async def test_presence_broadcaster_to_followers_and_chat(self):
+        bob_comm = WebsocketCommunicator(
+            application,
+            f"/ws/presence/?token={self.bob_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected, _ = await bob_comm.connect()
+        self.assertTrue(connected)
+
+        conv = await database_sync_to_async(Conversation.objects.create)()
+        await database_sync_to_async(conv.participants.add)(self.alice, self.bob)
+
+        bob_chat_comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/{conv.id}/?token={self.bob_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected_chat, _ = await bob_chat_comm.connect()
+        self.assertTrue(connected_chat)
+
+        alice_comm = WebsocketCommunicator(
+            application,
+            f"/ws/presence/?token={self.alice_token}",
+            headers=[(b"origin", b"http://localhost")]
+        )
+        connected_alice, _ = await alice_comm.connect()
+        self.assertTrue(connected_alice)
+
+        from accounts.tasks import broadcast_presence_change
+        await database_sync_to_async(broadcast_presence_change)(str(self.alice.id), "online")
+
+        event = await bob_comm.receive_json_from()
+        self.assertEqual(event["type"], "presence_update")
+        self.assertEqual(event["user_id"], str(self.alice.id))
+        self.assertEqual(event["status"], "online")
+
+        chat_event = await bob_chat_comm.receive_json_from()
+        self.assertEqual(chat_event["type"], "presence_update")
+        self.assertEqual(chat_event["user_id"], str(self.alice.id))
+        self.assertEqual(chat_event["status"], "online")
+
+        redis_client = get_redis_connection("default")
+        typing_key = f"typing_user_{self.alice.id}_{conv.id}"
+        await database_sync_to_async(redis_client.setex)(typing_key, 5, "true")
+
+        self.client.force_authenticate(user=self.bob)
+        res = await database_sync_to_async(self.client.get)(f"/api/v1/messaging/conversations/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["results"][0]["is_typing"])
+
+        await database_sync_to_async(redis_client.delete)(typing_key)
+        await bob_comm.disconnect()
+        await bob_chat_comm.disconnect()
+        await alice_comm.disconnect()
+
+
+
 
 

@@ -110,9 +110,19 @@ class ProfilePictureUploadSerializer(serializers.ModelSerializer):
         }
 
 class UserFollowDetailsSerializer(serializers.ModelSerializer):
+    is_online = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ('id', 'username', 'full_name', 'profile_picture', 'is_verified')
+        fields = ('id', 'username', 'full_name', 'profile_picture', 'is_verified', 'is_online', 'last_seen')
+
+    def get_is_online(self, obj):
+        from django_redis import get_redis_connection
+        try:
+            redis_client = get_redis_connection("default")
+            return redis_client.exists(f"presence_user_{obj.id}") > 0
+        except Exception:
+            return False
 
 from .models import Follow, FollowRequest, BlockedUser
 
