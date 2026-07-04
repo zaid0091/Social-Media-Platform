@@ -3,15 +3,37 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
+import useSWR from 'swr';
+import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import LeftSidebar from '@/components/navigation/LeftSidebar';
 import BottomNav from '@/components/navigation/BottomNav';
 import CreatePostFAB from '@/components/navigation/CreatePostFAB';
 import PostCreateModal from '@/components/posts/PostCreateModal';
 
+const fetcher = (url) => api.get(url).then((res) => res.data);
+
 export default function MainLayout({ children }) {
   const { isAuthenticated, loading, checkAuth } = useAuthStore();
   const router = useRouter();
+
+  // SWR queries for Right Sidebar
+  const { data: suggestions, mutate: mutateSuggestions } = useSWR(
+    isAuthenticated ? '/users/suggestions/' : null,
+    fetcher
+  );
+  const { data: trending } = useSWR(
+    isAuthenticated ? '/hashtags/trending/' : null,
+    fetcher
+  );
+
+  const handleFollowSuggestion = async (userId) => {
+    try {
+      await api.post(`/users/follow/${userId}/`);
+      // Update suggestions list
+      mutateSuggestions();
+    } catch (err) {}
+  };
 
   useEffect(() => {
     checkAuth();
@@ -67,25 +89,37 @@ export default function MainLayout({ children }) {
           <div className="p-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4">
             <h3 className="font-bold text-base px-2">Who to follow</h3>
             <div className="flex flex-col space-y-3">
-              {[
-                { name: 'Alice Smith', handle: 'alice' },
-                { name: 'Bob Johnson', handle: 'bob' }
-              ].map((item) => (
-                <div key={item.handle} className="flex items-center justify-between px-2">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="h-8 w-8 rounded-full bg-zinc-200 dark:bg-zinc-850 flex items-center justify-center font-semibold text-sm shrink-0">
-                      {item.name.charAt(0)}
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-semibold truncate leading-tight">{item.name}</span>
-                      <span className="text-xs text-zinc-500 truncate">@{item.handle}</span>
-                    </div>
+              {suggestions && suggestions.length > 0 ? (
+                suggestions.slice(0, 5).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between px-2">
+                    <Link href={`/${item.username}`} className="flex items-center space-x-3 min-w-0 group">
+                      {item.profile_picture ? (
+                        <img 
+                          src={item.profile_picture} 
+                          alt={item.username} 
+                          className="h-8 w-8 rounded-full object-cover border border-zinc-200/50 dark:border-zinc-800/50"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0">
+                          {item.username?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-bold truncate leading-tight group-hover:underline">{item.full_name || item.username}</span>
+                        <span className="text-xs text-zinc-500 truncate">@{item.username}</span>
+                      </div>
+                    </Link>
+                    <button 
+                      onClick={() => handleFollowSuggestion(item.id)}
+                      className="px-3 py-1 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-950 rounded-full text-xs font-bold hover:opacity-90 transition-opacity shrink-0 cursor-pointer select-none"
+                    >
+                      Follow
+                    </button>
                   </div>
-                  <button className="px-3 py-1 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-950 rounded-full text-xs font-bold hover:opacity-90 transition-opacity shrink-0">
-                    Follow
-                  </button>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-xs text-zinc-500 px-2">No follow suggestions available</p>
+              )}
             </div>
           </div>
 
@@ -93,18 +127,34 @@ export default function MainLayout({ children }) {
           <div className="p-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4">
             <h3 className="font-bold text-base px-2">Trending Topics</h3>
             <div className="flex flex-col space-y-3">
-              {[
-                { tag: '#nextjs', posts: '12.4k posts' },
-                { tag: '#tailwindcss', posts: '8.2k posts' },
-                { tag: '#webdev', posts: '22.1k posts' }
-              ].map((item) => (
-                <div key={item.tag} className="flex flex-col px-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 p-1.5 rounded-xl transition-all cursor-pointer">
-                  <span className="text-sm font-bold text-zinc-850 dark:text-zinc-150">{item.tag}</span>
-                  <span className="text-xs text-zinc-500">{item.posts}</span>
-                </div>
-              ))}
+              {trending && trending.length > 0 ? (
+                trending.slice(0, 5).map((item) => (
+                  <Link 
+                    key={item.id || item.name} 
+                    href={`/search?q=${encodeURIComponent('#' + item.name)}`}
+                    className="flex flex-col px-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 p-1.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    <span className="text-sm font-bold text-zinc-850 dark:text-zinc-150">#{item.name}</span>
+                    <span className="text-xs text-zinc-500">{item.count || 0} posts</span>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-xs text-zinc-500 px-2">No trending topics right now</p>
+              )}
             </div>
           </div>
+
+          {/* Footer Widget */}
+          <footer className="px-4 text-xs text-zinc-500 space-y-2 select-none">
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              <span className="hover:underline cursor-pointer">About</span>
+              <span className="hover:underline cursor-pointer">Terms of Service</span>
+              <span className="hover:underline cursor-pointer">Privacy Policy</span>
+              <span className="hover:underline cursor-pointer">Cookie Policy</span>
+              <span className="hover:underline cursor-pointer">Careers</span>
+            </div>
+            <p className="font-medium">© 2026 Social Media Platform</p>
+          </footer>
         </aside>
 
       </div>
