@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/v1/notifications/", include("notifications.urls")),
     path("api/v1/search/", include("search.urls")),
     path("api/v1/messaging/", include("messaging.urls")),
+    path("api/v1/moderation/", include("moderation.urls")),
 ]
 
 if settings.DEBUG:

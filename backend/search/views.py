@@ -92,7 +92,9 @@ class PostSearchView(APIView):
         posts = Post.objects.filter(
             Q(content__icontains=query) |
             Q(hashtag_associations__hashtag__name__icontains=clean_query),
-            is_deleted=False
+            is_deleted=False,
+            is_hidden=False,
+            needs_review=False
         ).exclude(
             author_id__in=all_blocked
         ).filter(

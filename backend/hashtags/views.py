@@ -24,7 +24,7 @@ class HashtagDetailView(APIView):
 
         # Get associated posts
         post_ids = PostHashtag.objects.filter(hashtag=hashtag).values_list('post_id', flat=True)
-        posts = Post.objects.filter(id__in=post_ids, is_deleted=False).order_by('-created_at')
+        posts = Post.objects.filter(id__in=post_ids, is_deleted=False, is_hidden=False, needs_review=False).order_by('-created_at')
 
         # Filter out posts from blocked users
         blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)

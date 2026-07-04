@@ -111,7 +111,7 @@ class UserPostListView(APIView):
             if not is_following:
                 return Response({"error": "This account is private."}, status=status.HTTP_403_FORBIDDEN)
 
-        posts = Post.objects.filter(author=target_user, is_deleted=False).order_by('-created_at')
+        posts = Post.objects.filter(author=target_user, is_deleted=False, is_hidden=False, needs_review=False).order_by('-created_at')
         paginator = PageNumberPagination()
         paginator.page_size = 10
         result_page = paginator.paginate_queryset(posts, request)
@@ -318,7 +318,9 @@ class BookmarkListView(APIView):
 
         posts = Post.objects.filter(
             id__in=bookmarked_post_ids,
-            is_deleted=False
+            is_deleted=False,
+            is_hidden=False,
+            needs_review=False
         ).exclude(author_id__in=all_blocked).order_by('-created_at')
 
         paginator = PageNumberPagination()
@@ -381,7 +383,7 @@ class CommentListCreateView(APIView):
         ).exists():
             return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        comments = Comment.objects.filter(post=post, parent__isnull=True, is_deleted=False).order_by('-created_at')
+        comments = Comment.objects.filter(post=post, parent__isnull=True, is_deleted=False, is_hidden=False, needs_review=False).order_by('-created_at')
 
         blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
         blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
@@ -454,7 +456,7 @@ class CommentRepliesView(APIView):
         ).exists():
             return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        replies = Comment.objects.filter(parent=comment, is_deleted=False).order_by('created_at')
+        replies = Comment.objects.filter(parent=comment, is_deleted=False, is_hidden=False, needs_review=False).order_by('created_at')
 
         blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
         blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)

@@ -33,6 +33,8 @@ class Post(models.Model):
     view_count = models.IntegerField(default=0)
     
     is_deleted = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False)
+    needs_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -68,6 +70,8 @@ class Comment(models.Model):
     like_count = models.IntegerField(default=0)
     reply_count = models.IntegerField(default=0)
     is_deleted = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False)
+    needs_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

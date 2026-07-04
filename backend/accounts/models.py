@@ -33,6 +33,11 @@ class User(AbstractUser):
     post_count = models.IntegerField(default=0)
     last_seen = models.DateTimeField(null=True, blank=True)
     
+    # Moderation fields
+    is_suspended = models.BooleanField(default=False)
+    suspension_expires_at = models.DateTimeField(null=True, blank=True)
+    is_banned = models.BooleanField(default=False)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

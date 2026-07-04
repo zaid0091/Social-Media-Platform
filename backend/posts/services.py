@@ -25,7 +25,9 @@ class FeedGenerationService:
         # 3. Retrieve posts from followed users
         posts = Post.objects.filter(
             author_id__in=followed_ids,
-            is_deleted=False
+            is_deleted=False,
+            is_hidden=False,
+            needs_review=False
         ).exclude(
             author_id__in=all_blocked
         ).exclude(

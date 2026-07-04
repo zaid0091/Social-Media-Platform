@@ -112,6 +112,22 @@ class LoginView(APIView):
         user = authenticate(username=username, password=password)
 
         if user is not None:
+            # Check if user is banned
+            if user.is_banned:
+                return Response({"error": "Your account has been permanently banned."}, status=status.HTTP_403_FORBIDDEN)
+
+            # Check if user is suspended
+            if user.is_suspended:
+                from django.utils import timezone
+                if user.suspension_expires_at and user.suspension_expires_at > timezone.now():
+                    expires_str = user.suspension_expires_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+                    return Response({"error": f"Your account is suspended until {expires_str}."}, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    # Suspension has expired, lift it automatically
+                    user.is_suspended = False
+                    user.suspension_expires_at = None
+                    user.save(update_fields=['is_suspended', 'suspension_expires_at'])
+
             if not user.is_active:
                 return Response({"error": "Please verify your email before logging in."}, status=status.HTTP_400_BAD_REQUEST)
 

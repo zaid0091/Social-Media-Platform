@@ -20,6 +20,8 @@ class Story(models.Model):
     view_count = models.IntegerField(default=0)
     expires_at = models.DateTimeField(blank=True)
     is_expired = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False)
+    needs_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

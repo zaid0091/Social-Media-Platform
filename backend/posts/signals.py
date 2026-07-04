@@ -150,3 +150,61 @@ def update_comment_counts(sender, instance, **kwargs):
         parent = instance.parent
         parent.reply_count = Comment.objects.filter(parent=parent, is_deleted=False).count()
         parent.save(update_fields=['reply_count'])
+
+
+from django.db.models.signals import pre_save
+from moderation.utils import check_content_moderation
+from moderation.models import Report
+from stories.models import Story
+
+@receiver(pre_save, sender=Post)
+def moderate_post_pre_save(sender, instance, **kwargs):
+    violates, reason = check_content_moderation(instance.content)
+    if violates:
+        instance.needs_review = True
+
+@receiver(post_save, sender=Post)
+def create_post_report_post_save(sender, instance, created, **kwargs):
+    if created and instance.needs_review:
+        Report.objects.create(
+            reporter=None,
+            reported_post=instance,
+            reason='other',
+            description="Automated Content Flagging System: Guideline violation detected.",
+            status='needs_review'
+        )
+
+@receiver(pre_save, sender=Comment)
+def moderate_comment_pre_save(sender, instance, **kwargs):
+    violates, reason = check_content_moderation(instance.content)
+    if violates:
+        instance.needs_review = True
+
+@receiver(post_save, sender=Comment)
+def create_comment_report_post_save(sender, instance, created, **kwargs):
+    if created and instance.needs_review:
+        Report.objects.create(
+            reporter=None,
+            reported_comment=instance,
+            reason='other',
+            description="Automated Content Flagging System: Guideline violation detected.",
+            status='needs_review'
+        )
+
+@receiver(pre_save, sender=Story)
+def moderate_story_pre_save(sender, instance, **kwargs):
+    violates, reason = check_content_moderation(instance.caption)
+    if violates:
+        instance.needs_review = True
+
+@receiver(post_save, sender=Story)
+def create_story_report_post_save(sender, instance, created, **kwargs):
+    if created and instance.needs_review:
+        Report.objects.create(
+            reporter=None,
+            reported_story=instance,
+            reason='other',
+            description="Automated Content Flagging System: Guideline violation detected.",
+            status='needs_review'
+        )
+
