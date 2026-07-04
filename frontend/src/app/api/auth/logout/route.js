@@ -21,12 +21,9 @@ export async function POST(request) {
 
   const nextResponse = NextResponse.json({ success: true }, { status: 200 });
 
-  // Clear the HttpOnly cookie by setting an expired date
-  // Standard refresh token cookie name is configured as JWT_COOKIE_NAME in backend (refreshtoken)
-  nextResponse.headers.append(
-    'Set-Cookie',
-    'refreshtoken=; Path=/; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
-  );
+  // Clear the HttpOnly cookie using native Next.js API for both potential variants
+  nextResponse.cookies.delete('refresh_token');
+  nextResponse.cookies.delete('refreshtoken');
 
   return nextResponse;
 }

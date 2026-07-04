@@ -58,7 +58,11 @@ const useAuthStore = create((set, get) => ({
     try {
       // Get new access token using secure HttpOnly refresh cookie proxy
       const response = await axios.post('/api/auth/refresh/');
-      const { access } = response.data;
+      const access = response.data.access_token || response.data.access;
+
+      if (!access) {
+        throw new Error('No access token returned from refresh endpoint');
+      }
 
       // Update state temporarily so the profile API call works with authorization headers
       set({ accessToken: access });

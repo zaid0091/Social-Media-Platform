@@ -73,7 +73,11 @@ api.interceptors.response.use(
       try {
         // Call local Next.js refresh proxy to exchange HttpOnly refresh cookie for a new access token
         const response = await axios.post('/api/auth/refresh/');
-        const { access } = response.data;
+        const access = response.data.access_token || response.data.access;
+
+        if (!access) {
+          throw new Error('No access token returned from refresh endpoint');
+        }
 
         // Store new access token in Zustand memory store
         useAuthStore.getState().setAccessToken(access);
