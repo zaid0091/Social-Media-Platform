@@ -284,8 +284,13 @@ class PublicProfileView(APIView):
 
         is_self = (request.user == target_user)
         is_following = False
+        follow_request_pending = False
         if not is_self:
             is_following = Follow.objects.filter(follower=request.user, following=target_user).exists()
+            if not is_following and target_user.is_private:
+                follow_request_pending = FollowRequest.objects.filter(
+                    requester=request.user, receiver=target_user, status='pending'
+                ).exists()
 
         is_accessible = not target_user.is_private or is_self or is_following
 
@@ -293,6 +298,7 @@ class PublicProfileView(APIView):
         serializer_data['is_following'] = is_following
         serializer_data['is_self'] = is_self
         serializer_data['is_accessible'] = is_accessible
+        serializer_data['follow_request_pending'] = follow_request_pending
 
         if not is_accessible:
             # Hide sensitive fields for private profile if not followed
