@@ -186,13 +186,13 @@ class StoryViewerListView(APIView):
         if story.author != request.user:
             return Response({"error": "You do not have permission to view this story's viewers."}, status=status.HTTP_403_FORBIDDEN)
 
-        viewers = User.objects.filter(story_views__story=story).order_by('username')
+        views = StoryView.objects.filter(story=story).select_related('viewer').order_by('-viewed_at')
         
         paginator = PageNumberPagination()
         paginator.page_size = 10
-        result_page = paginator.paginate_queryset(viewers, request)
-        from accounts.serializers import UserFollowDetailsSerializer
-        serializer = UserFollowDetailsSerializer(result_page, many=True, context={'request': request})
+        result_page = paginator.paginate_queryset(views, request)
+        from .serializers import StoryViewSerializer
+        serializer = StoryViewSerializer(result_page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
 
 class StoryHighlightCreateView(APIView):

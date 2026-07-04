@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Search } from 'lucide-react';
 import useSWR from 'swr';
 import api from '@/services/api';
@@ -35,11 +36,7 @@ export default function MainLayout({ children }) {
     } catch (err) {}
   };
 
-  useEffect(() => {
-    if (!isAuthenticated && !isLoading) {
-      refreshSession();
-    }
-  }, [isAuthenticated, isLoading, refreshSession]);
+
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

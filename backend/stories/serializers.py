@@ -53,3 +53,10 @@ class StoryHighlightCreateSerializer(serializers.ModelSerializer):
             if story.author != user:
                 raise serializers.ValidationError("You can only add your own stories to highlights.")
         return value
+
+class StoryViewSerializer(serializers.ModelSerializer):
+    viewer = UserFollowDetailsSerializer(read_only=True)
+
+    class Meta:
+        model = StoryView
+        fields = ('id', 'viewer', 'viewed_at')

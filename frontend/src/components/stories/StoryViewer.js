@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Volume2, VolumeX, Heart, ChevronLeft, ChevronRight, FolderHeart } from 'lucide-react';
+import { X, Volume2, VolumeX, Heart, ChevronLeft, ChevronRight, FolderHeart, Eye } from 'lucide-react';
 import useSWR from 'swr';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import StoryViewerList from './StoryViewerList';
 
 export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClose, onStoryViewed }) {
   const { user: currentUser } = useAuthStore();
@@ -25,6 +26,7 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
 
   const [showHighlightPopover, setShowHighlightPopover] = useState(false);
   const isOwnStory = activeGroup?.author?.id === currentUser?.id;
+  const [isViewerListOpen, setIsViewerListOpen] = useState(false);
 
   // Fetch highlights of this profile to support adding
   const { data: ownHighlights = [], mutate: mutateOwnHighlights } = useSWR(
@@ -170,6 +172,26 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
     }
   };
 
+  const touchStartY = useRef(null);
+
+  const handleTouchStart = (e) => {
+    touchStartY.current = e.touches[0].clientY;
+    setIsPaused(true);
+  };
+
+  const handleTouchEnd = (e) => {
+    setIsPaused(false);
+    if (touchStartY.current !== null) {
+      const touchEndY = e.changedTouches[0].clientY;
+      const diffY = touchStartY.current - touchEndY;
+      if (isOwnStory && diffY > 80) {
+        setIsPaused(true);
+        setIsViewerListOpen(true);
+      }
+      touchStartY.current = null;
+    }
+  };
+
   const timeAgoString = () => {
     const diffMs = new Date() - new Date(activeStory.created_at);
     const diffMins = Math.floor(diffMs / 60000);
@@ -199,8 +221,8 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
           <div 
             onMouseDown={() => setIsPaused(true)}
             onMouseUp={() => setIsPaused(false)}
-            onTouchStart={() => setIsPaused(true)}
-            onTouchEnd={() => setIsPaused(false)}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
             className="w-1/3 h-full"
           />
           {/* Right tap area (navigate forward) */}
@@ -316,6 +338,22 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
               {activeStory.caption}
             </p>
             
+            {/* View count pill (Only for own active stories) */}
+            {isOwnStory && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaused(true); // Pause stories progression while viewers drawer is open
+                  setIsViewerListOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-full bg-black/45 hover:bg-black/60 text-white backdrop-blur-md cursor-pointer select-none text-xs font-bold flex items-center space-x-1.5 z-35 mr-auto mb-1 shrink-0 border border-white/10 transition-colors"
+                aria-label="View Story Viewers"
+              >
+                <Eye className="h-3.5 w-3.5 text-zinc-350" />
+                <span>{activeStory.view_count || 0}</span>
+              </button>
+            )}
+
             {/* Folder Heart Add-to-Highlight Action */}
             {isOwnStory && (
               <div className="relative">
@@ -414,6 +452,17 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
         >
           <ChevronRight className="h-6 w-6" />
         </button>
+      )}
+      {/* Viewer List bottom-drawer panel */}
+      {isViewerListOpen && (
+        <StoryViewerList
+          storyId={activeStory.id}
+          isOpen={isViewerListOpen}
+          onClose={() => {
+            setIsViewerListOpen(false);
+            setIsPaused(false); // Resume stories progression
+          }}
+        />
       )}
     </div>
   );

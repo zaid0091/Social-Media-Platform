@@ -140,7 +140,7 @@ class StoriesAPITests(TestCase):
         res = self.client.get(f"/api/v1/stories/{story.id}/viewers/")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["count"], 1)
-        self.assertEqual(res.data["results"][0]["username"], "story_viewer")
+        self.assertEqual(res.data["results"][0]["viewer"]["username"], "story_viewer")
 
     def test_story_highlight_crud(self):
         story = Story.objects.create(

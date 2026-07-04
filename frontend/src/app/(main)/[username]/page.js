@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
+import HighlightEditModal from '@/components/stories/HighlightEditModal';
 import StoryViewer from '@/components/stories/StoryViewer';
 import { 
   Lock, 
@@ -20,7 +21,8 @@ import {
   MessageSquare,
   Globe,
   Plus,
-  FolderHeart
+  FolderHeart,
+  Settings
 } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
@@ -64,6 +66,8 @@ export default function ProfilePage() {
   const posts = postsData?.results || [];
 
   const [isCreateHighlightOpen, setIsCreateHighlightOpen] = useState(false);
+  const [isEditHighlightOpen, setIsEditHighlightOpen] = useState(false);
+  const [editHighlightTarget, setEditHighlightTarget] = useState(null);
   const [activeHighlight, setActiveHighlight] = useState(null);
 
   // 2b. Fetch user highlights
@@ -287,25 +291,43 @@ export default function ProfilePage() {
 
             {/* Existing Highlights */}
             {highlights && highlights.map((highlight) => (
-              <div key={highlight.id} className="flex flex-col items-center space-y-1 shrink-0">
-                <button
-                  onClick={() => handleOpenHighlight(highlight)}
-                  className="h-14 w-14 rounded-full border border-zinc-250 dark:border-zinc-800 p-[2px] hover:border-primary flex items-center justify-center bg-zinc-55 dark:bg-zinc-900 overflow-hidden cursor-pointer hover:scale-105 transition-all"
-                >
-                  <div className="h-full w-full rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-                    {highlight.cover_image ? (
-                      <img 
-                        src={highlight.cover_image} 
-                        alt={highlight.title} 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                        <FolderHeart className="h-5 w-5 text-white" />
-                      </div>
-                    )}
-                  </div>
-                </button>
+              <div key={highlight.id} className="flex flex-col items-center space-y-1 shrink-0 relative group">
+                <div className="relative">
+                  <button
+                    onClick={() => handleOpenHighlight(highlight)}
+                    className="h-14 w-14 rounded-full border border-zinc-250 dark:border-zinc-800 p-[2px] hover:border-primary flex items-center justify-center bg-zinc-55 dark:bg-zinc-900 overflow-hidden cursor-pointer hover:scale-105 transition-all"
+                  >
+                    <div className="h-full w-full rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                      {highlight.cover_image ? (
+                        <img 
+                          src={highlight.cover_image} 
+                          alt={highlight.title} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                          <FolderHeart className="h-5 w-5 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Settings gear trigger icon for self editing */}
+                  {isSelf && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditHighlightTarget(highlight);
+                        setIsEditHighlightOpen(true);
+                      }}
+                      className="absolute -bottom-1 -right-1 p-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 rounded-full transition cursor-pointer z-10"
+                      aria-label="Edit Highlight"
+                    >
+                      <Settings className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
                 <span className="text-[10px] text-zinc-800 dark:text-zinc-300 font-bold truncate max-w-[65px]">
                   {highlight.title}
                 </span>
@@ -415,6 +437,19 @@ export default function ProfilePage() {
         onClose={() => setIsCreateHighlightOpen(false)}
         onHighlightCreated={() => mutateHighlights()}
       />
+
+      {/* Highlight Editor Modal */}
+      {editHighlightTarget && (
+        <HighlightEditModal
+          isOpen={isEditHighlightOpen}
+          onClose={() => {
+            setIsEditHighlightOpen(false);
+            setEditHighlightTarget(null);
+          }}
+          highlight={editHighlightTarget}
+          onHighlightUpdated={() => mutateHighlights()}
+        />
+      )}
 
       {/* Highlight Viewer Overlay */}
       {activeHighlight && (
