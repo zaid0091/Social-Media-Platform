@@ -68,9 +68,21 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'full_name', 'bio', 'website', 'location', 
-            'date_of_birth', 'phone_number', 'is_private', 'account_type'
+            'username', 'full_name', 'bio', 'website', 'location', 
+            'date_of_birth', 'gender', 'phone_number', 'is_private', 'account_type',
+            'profile_picture', 'cover_photo'
         )
+
+    def validate_username(self, value):
+        user = self.instance
+        value = value.lower()
+        if User.objects.filter(username__iexact=value).exclude(id=user.id).exists():
+            raise serializers.ValidationError("A user with that username already exists.")
+        if len(value) < 3 or len(value) > 30:
+            raise serializers.ValidationError("Username must be between 3 and 30 characters.")
+        if not re.match(r"^[a-zA-Z0-9_]+$", value):
+            raise serializers.ValidationError("Only letters, numbers, and underscores are allowed.")
+        return value
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})

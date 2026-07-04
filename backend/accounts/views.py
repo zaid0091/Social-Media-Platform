@@ -254,11 +254,7 @@ class UserProfileView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request, *args, **kwargs):
-        # Determine serializer depending on uploaded files or textual field updates
-        if 'profile_picture' in request.FILES or 'cover_photo' in request.FILES:
-            serializer = ProfilePictureUploadSerializer(request.user, data=request.data, partial=True)
-        else:
-            serializer = UserUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer = UserUpdateSerializer(request.user, data=request.data, partial=True)
 
         if serializer.is_valid():
             serializer.save()

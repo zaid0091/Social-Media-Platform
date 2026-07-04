@@ -18,6 +18,7 @@ class User(AbstractUser):
     location = models.CharField(max_length=100, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
+    gender = models.CharField(max_length=20, blank=True, null=True)
     
     is_verified = models.BooleanField(default=False)
     is_private = models.BooleanField(default=False)
