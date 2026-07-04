@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import { 
   Heart, 
@@ -107,8 +108,7 @@ function RepliesList({ commentId, onReplyTo, onReplyDelete }) {
   );
 }
 
-// SWR auto-import hook check
-import useSWR from 'swr';
+
 
 export default function CommentItem({ comment, onReply, onDelete, onEdit }) {
   const { user: currentUser } = useAuthStore();

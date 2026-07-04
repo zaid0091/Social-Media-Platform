@@ -6,6 +6,7 @@ import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import PostCard from '@/components/posts/PostCard';
 import SkeletonPostCard from '@/components/posts/SkeletonPostCard';
+import StoriesBar from '@/components/stories/StoriesBar';
 import { ArrowUp, RefreshCw, Compass, Users } from 'lucide-react';
 import Link from 'next/link';
 
@@ -132,36 +133,8 @@ export default function HomeFeedPage() {
         </div>
       )}
 
-      {/* 3. Horizontal Stories row placeholder */}
-      <div className="flex space-x-4 p-4 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/20 dark:bg-zinc-900/20 scrollbar-none">
-        {/* Current user story */}
-        <div className="flex flex-col items-center space-y-1 shrink-0 cursor-pointer">
-          <div className="h-14 w-14 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-850 flex items-center justify-center bg-white dark:bg-zinc-900 relative">
-            <div className="h-11 w-11 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center font-bold text-sm text-zinc-650">
-              +
-            </div>
-          </div>
-          <span className="text-[11px] text-zinc-500 font-semibold">Your story</span>
-        </div>
-
-        {/* Mock other users stories */}
-        {suggestions && suggestions.slice(0, 6).map((item) => (
-          <div key={item.id} className="flex flex-col items-center space-y-1 shrink-0 cursor-pointer group">
-            <div className="h-14 w-14 rounded-full p-0.5 bg-gradient-to-tr from-primary to-secondary flex items-center justify-center border border-transparent group-hover:scale-105 transition-transform">
-              <div className="h-full w-full rounded-full border-2 border-white dark:border-zinc-900 overflow-hidden bg-zinc-100">
-                {item.profile_picture ? (
-                  <img src={item.profile_picture} alt={item.username} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs">
-                    {item.username?.charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
-            </div>
-            <span className="text-[11px] text-zinc-500 font-semibold truncate max-w-[65px]">{item.username}</span>
-          </div>
-        ))}
-      </div>
+      {/* 3. Horizontal Stories row */}
+      <StoriesBar onCreateStory={() => alert("Story creation is coming in Phase 44!")} />
 
       {/* 4. Feed List area */}
       <div className="flex flex-col flex-1 divide-y divide-zinc-200 dark:divide-zinc-800">
