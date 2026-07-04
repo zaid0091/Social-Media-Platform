@@ -4,33 +4,33 @@ import api from '../services/api';
 
 const useAuthStore = create((set, get) => ({
   user: null,
-  token: typeof window !== 'undefined' ? localStorage.getItem('access_token') : null,
+  accessToken: null,
   isAuthenticated: false,
-  loading: true,
+  isLoading: true,
+
+  setLoading: (isLoading) => set({ isLoading }),
+  
+  setAccessToken: (accessToken) => set({ accessToken }),
+
+  updateUser: (userData) => set((state) => ({
+    user: state.user ? { ...state.user, ...userData } : userData
+  })),
 
   login: async (username, password) => {
-    set({ loading: true });
+    set({ isLoading: true });
     try {
-      // Call local Next.js API proxy instead of backend directly
       const response = await axios.post('/api/auth/login/', { username, password });
       const { access_token, user } = response.data;
       
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('access_token', access_token);
-      }
-      
-      // Update global API headers for immediate request chaining
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-
       set({
         user,
-        token: access_token,
+        accessToken: access_token,
         isAuthenticated: true,
-        loading: false
+        isLoading: false
       });
       return { success: true };
     } catch (error) {
-      set({ loading: false });
+      set({ isLoading: false });
       return {
         success: false,
         error: error.response?.data?.error || 'Login failed'
@@ -40,49 +40,47 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try {
-      // Call local Next.js API proxy to clear httpOnly cookies
       await axios.post('/api/auth/logout/');
     } catch (e) {
       // Ignored for offline safety
     }
-    
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('access_token');
-    }
-    
-    delete api.defaults.headers.common['Authorization'];
 
     set({
       user: null,
-      token: null,
+      accessToken: null,
       isAuthenticated: false,
-      loading: false
+      isLoading: false
     });
   },
 
-  checkAuth: async () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    if (!token) {
-      set({ user: null, token: null, isAuthenticated: false, loading: false });
-      return;
-    }
-
+  refreshSession: async () => {
+    set({ isLoading: true });
     try {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      const response = await api.get('/users/profile/');
+      // Get new access token using secure HttpOnly refresh cookie proxy
+      const response = await axios.post('/api/auth/refresh/');
+      const { access } = response.data;
+
+      // Update state temporarily so the profile API call works with authorization headers
+      set({ accessToken: access });
+
+      // Fetch user profile info
+      const userResponse = await api.get('/users/profile/');
+
       set({
-        user: response.data,
-        token,
+        user: userResponse.data,
+        accessToken: access,
         isAuthenticated: true,
-        loading: false
+        isLoading: false
       });
+      return { success: true };
     } catch (error) {
-      // Refresh token failure or invalid credential: wipe access token
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token');
-      }
-      delete api.defaults.headers.common['Authorization'];
-      set({ user: null, token: null, isAuthenticated: false, loading: false });
+      set({
+        user: null,
+        accessToken: null,
+        isAuthenticated: false,
+        isLoading: false
+      });
+      return { success: false };
     }
   }
 }));

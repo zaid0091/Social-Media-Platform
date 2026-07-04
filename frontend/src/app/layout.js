@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import AuthInitializer from "@/components/AuthInitializer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,7 +31,9 @@ export default function RootLayout({ children }) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-light-bg text-foreground dark:bg-dark-bg transition-colors duration-200">
-        {children}
+        <AuthInitializer>
+          {children}
+        </AuthInitializer>
       </body>
     </html>
   );

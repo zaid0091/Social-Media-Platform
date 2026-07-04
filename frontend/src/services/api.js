@@ -1,21 +1,20 @@
 import axios from 'axios';
+import useAuthStore from '../store/useAuthStore';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1',
-  withCredentials: true, // Necessary for cookies/refresh token exchange
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1',
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request Interceptor: Inject JWT Access Token from localStorage
+// Request Interceptor: Attach the in-memory access token from Zustand store
 api.interceptors.request.use(
   (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    const token = useAuthStore.getState().accessToken;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -24,7 +23,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Queue failed requests and handle 401 token refresh
+// Response Interceptor: Catch 401 errors, trigger silent refresh, and retry original request
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -46,12 +45,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if error is 401 and request has not already been retried
+    // Check if error is 401 (Unauthorized) and request has not already been retried
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
       originalRequest.url &&
-      !originalRequest.url.includes('/auth/token/')
+      !originalRequest.url.includes('/auth/login/') &&
+      !originalRequest.url.includes('/auth/token/refresh/')
     ) {
       if (isRefreshing) {
         // Queue this request and wait for the refresh call to finish
@@ -71,21 +71,14 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Send a POST request to refresh token endpoint
-        // Django simplejwt expects /auth/token/refresh/
-        const response = await axios.post(
-          `${api.defaults.baseURL}/auth/token/refresh/`,
-          {},
-          { withCredentials: true }
-        );
-
+        // Call local Next.js refresh proxy to exchange HttpOnly refresh cookie for a new access token
+        const response = await axios.post('/api/auth/refresh/');
         const { access } = response.data;
 
-        // Save new access token
-        localStorage.setItem('access_token', access);
-        
-        // Update current request and axios default configurations
-        api.defaults.headers.common.Authorization = `Bearer ${access}`;
+        // Store new access token in Zustand memory store
+        useAuthStore.getState().setAccessToken(access);
+
+        // Update retry headers
         originalRequest.headers.Authorization = `Bearer ${access}`;
 
         processQueue(null, access);
@@ -93,8 +86,9 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         
-        // Clear tokens and redirect to login page if token refresh fails
-        localStorage.removeItem('access_token');
+        // Log out user globally and redirect to login if token refresh fails
+        useAuthStore.getState().logout();
+        
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }
