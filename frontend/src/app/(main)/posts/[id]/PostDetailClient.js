@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -9,117 +9,52 @@ import {
   MessageCircle, 
   Share2, 
   Bookmark, 
-  ChevronDown, 
-  ChevronUp, 
-  Smile, 
-  X, 
-  Send,
-  MoreHorizontal,
-  Trash2,
-  AlertTriangle,
-  ArrowLeft
+  ArrowLeft,
+  ChevronDown
 } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import CarouselComponent from '@/components/posts/CarouselComponent';
 import VideoPlayer from '@/components/posts/VideoPlayer';
+import CommentItem from '@/components/posts/CommentItem';
+import CommentInput from '@/components/posts/CommentInput';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
-
-// Sub-component to manage nested comment replies dynamically
-function RepliesList({ commentId, onReplyTo }) {
-  const { data: repliesData, error } = useSWR(`/posts/comments/${commentId}/replies/`, fetcher);
-  const replies = repliesData?.results || [];
-
-  if (error) return <p className="text-xs text-red-500 pl-12 py-1">Failed to load replies.</p>;
-  if (!repliesData) return <div className="h-4 w-4 rounded-full border-2 border-zinc-200 border-t-primary animate-spin ml-12 my-2" />;
-
-  return (
-    <div className="pl-10 mt-2 space-y-3 border-l border-zinc-100 dark:border-zinc-800 ml-4">
-      {replies.map((reply) => (
-        <div key={reply.id} className="flex space-x-2 text-xs">
-          {/* Reply avatar */}
-          {reply.author.profile_picture ? (
-            <img 
-              src={reply.author.profile_picture} 
-              alt={reply.author.username} 
-              className="h-6 w-6 rounded-full object-cover border border-zinc-150 dark:border-zinc-850"
-            />
-          ) : (
-            <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-[10px]">
-              {reply.author.username?.charAt(0).toUpperCase()}
-            </div>
-          )}
-
-          {/* Reply body */}
-          <div className="flex-1 min-w-0">
-            <p className="text-zinc-850 dark:text-zinc-200">
-              <Link href={`/${reply.author.username}`} className="font-extrabold hover:underline mr-1">
-                {reply.author.username}
-              </Link>
-              {reply.content}
-            </p>
-            <div className="flex items-center space-x-3 text-zinc-500 mt-1">
-              <span>{new Date(reply.created_at).toLocaleDateString()}</span>
-              <button 
-                onClick={() => onReplyTo(commentId, reply.author.username)}
-                className="hover:underline font-bold cursor-pointer"
-              >
-                Reply
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export default function PostDetailClient({ id }) {
   const router = useRouter();
   const { user: currentUser } = useAuthStore();
+  
+  // Input tracking states
   const [commentText, setCommentText] = useState('');
-  
-  // Emoji Picker states
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const emojiRef = useRef(null);
-
-  // Reply target parameters
+  const [submitting, setSubmitting] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null); // { commentId, username }
-  
-  // Optimistic Like states
+
+  // Comments lists states
+  const [comments, setComments] = useState([]);
+  const [commentsPage, setCommentsPage] = useState(1);
+  const [hasNextComments, setHasNextComments] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+
+  // Optimistic Post Like states
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [animateHeart, setAnimateHeart] = useState(false);
 
-  // Collapsed replies mapping
-  const [openReplies, setOpenReplies] = useState({}); // { commentId: boolean }
-
-  const commentInputRef = useRef(null);
-
   // 1. Fetch Post Detail
   const { 
     data: post, 
-    error: postError, 
     mutate: mutatePost 
   } = useSWR(id ? `/posts/${id}/` : null, fetcher);
 
-  // 2. Fetch Comments
-  const { 
-    data: commentsData, 
-    mutate: mutateComments 
-  } = useSWR(id ? `/posts/${id}/comments/` : null, fetcher);
-
-  // 3. Fetch Likers
+  // 2. Fetch Likers list details
   const { 
     data: likersData 
   } = useSWR(id ? `/posts/${id}/likers/` : null, fetcher);
-
-  const comments = commentsData?.results || [];
   const likers = likersData?.results || [];
 
-  // Sync state values on load
+  // Sync post properties on load
   useEffect(() => {
     if (post) {
       setIsLiked(post.is_liked);
@@ -128,41 +63,31 @@ export default function PostDetailClient({ id }) {
     }
   }, [post]);
 
-  // Auto focus comment input on load
-  useEffect(() => {
-    if (commentInputRef.current) {
-      commentInputRef.current.focus();
+  // Fetch comments page-by-page
+  const fetchComments = async (pageNumber, isRefresh = false) => {
+    if (!id) return;
+    setLoadingComments(true);
+    try {
+      const res = await api.get(`/posts/${id}/comments/?page=${pageNumber}`);
+      const results = res.data.results || [];
+      setComments((prev) => isRefresh ? results : [...prev, ...results]);
+      setHasNextComments(!!res.data.next);
+    } catch (err) {
+    } finally {
+      setLoadingComments(false);
     }
-  }, [post]);
+  };
 
-  // Click outside to auto-close emoji popup panel
   useEffect(() => {
-    const clickOutside = (e) => {
-      if (emojiRef.current && !emojiRef.current.contains(e.target)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', clickOutside);
-    return () => document.removeEventListener('mousedown', clickOutside);
-  }, []);
+    setCommentsPage(1);
+    fetchComments(1, true);
+  }, [id]);
 
-  if (postError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <h2 className="text-lg font-bold">Post Not Found</h2>
-        <p className="text-zinc-500 text-sm">This post may have been deleted or account visibility is restricted.</p>
-        <button onClick={() => router.back()} className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold">Go Back</button>
-      </div>
-    );
-  }
-
-  if (!post) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="h-8 w-8 rounded-full border-4 border-zinc-200 border-t-primary animate-spin" />
-      </div>
-    );
-  }
+  const handleLoadMoreComments = () => {
+    const nextPage = commentsPage + 1;
+    setCommentsPage(nextPage);
+    fetchComments(nextPage, false);
+  };
 
   const handleLikeToggle = async () => {
     const wasLiked = isLiked;
@@ -195,46 +120,76 @@ export default function PostDetailClient({ id }) {
     }
   };
 
-  // Submit Comments / Replies
-  const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    if (!commentText.trim()) return;
+  // Submit new top-level comment or reply with Optimistic rendering
+  const handleCommentSubmit = async (text) => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    const tempId = 'temp-' + Date.now();
+    const tempComment = {
+      id: tempId,
+      content: replyTarget ? `@${replyTarget.username} ${text}` : text,
+      author: currentUser || { username: 'you' },
+      created_at: new Date().toISOString(),
+      like_count: 0,
+      reply_count: 0,
+      is_liked: false,
+      parent: replyTarget ? replyTarget.commentId : null
+    };
+
+    // Optimistic UI updates
+    if (!tempComment.parent) {
+      // Prepend to top-level comments list
+      setComments((prev) => [tempComment, ...prev]);
+    } else {
+      // Update parent comment reply counter in the list
+      setComments((prev) => prev.map(c => 
+        c.id === tempComment.parent ? { ...c, reply_count: c.reply_count + 1 } : c
+      ));
+    }
 
     try {
       const payload = {
         post: post.id,
-        content: replyTarget ? `@${replyTarget.username} ${commentText}` : commentText,
-        parent: replyTarget ? replyTarget.commentId : null
+        content: tempComment.content,
+        parent: tempComment.parent
       };
-
+      
       await api.post(`/posts/${post.id}/comments/`, payload);
       setCommentText('');
       setReplyTarget(null);
-
-      // Reload comments SWR cache
-      mutateComments();
+      
+      // Refresh backend list
+      fetchComments(1, true);
       mutatePost();
-
-      // If reply, expand replies drawer
-      if (payload.parent) {
-        setOpenReplies((prev) => ({ ...prev, [payload.parent]: true }));
+    } catch (err) {
+      // Revert optimistic updates on error
+      if (!tempComment.parent) {
+        setComments((prev) => prev.filter(c => c.id !== tempId));
+      } else {
+        setComments((prev) => prev.map(c => 
+          c.id === tempComment.parent ? { ...c, reply_count: Math.max(0, c.reply_count - 1) } : c
+        ));
       }
-    } catch (err) {}
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleAddEmoji = (emoji) => {
-    setCommentText((prev) => prev + emoji);
-    setShowEmojiPicker(false);
-    commentInputRef.current.focus();
+  const handleCommentDelete = (deletedId) => {
+    setComments((prev) => prev.filter(c => c.id !== deletedId));
+    mutatePost();
   };
 
-  const toggleRepliesDrawer = (commentId) => {
-    setOpenReplies((prev) => ({ ...prev, [commentId]: !prev[commentId] }));
+  const handleCommentEdit = (editedId, newContent) => {
+    setComments((prev) => prev.map(c => 
+      c.id === editedId ? { ...c, content: newContent } : c
+    ));
+    mutatePost();
   };
 
   const handleReplyClick = (commentId, username) => {
     setReplyTarget({ commentId, username });
-    commentInputRef.current.focus();
   };
 
   const getLikerSummaryString = () => {
@@ -249,12 +204,18 @@ export default function PostDetailClient({ id }) {
     return `Liked by ${firstLiker || 'someone'} and ${otherCount} other${otherCount > 1 ? 's' : ''}`;
   };
 
-  const emojis = ['😃', '😂', '🤣', '😊', '😍', '🥰', '😘', '😜', '🤔', '👍', '👎', '🔥', '👏', '🎉', '❤️', '💔'];
+  if (!post) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="h-8 w-8 rounded-full border-4 border-zinc-200 border-t-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Detail view header */}
-      <header className="sticky top-0 z-10 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
+      {/* 1. Header Row */}
+      <header className="sticky top-0 z-10 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-xl border-b border-zinc-150 dark:border-zinc-800/80 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <button onClick={() => router.back()} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 cursor-pointer">
             <ArrowLeft className="h-5 w-5" />
@@ -263,10 +224,10 @@ export default function PostDetailClient({ id }) {
         </div>
       </header>
 
-      {/* Main split presentation box container */}
+      {/* 2. Main split box container */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden bg-zinc-50/20 dark:bg-zinc-950/10">
         
-        {/* Left Side: Media display panel */}
+        {/* Left media block */}
         <div className="lg:col-span-7 flex items-center justify-center bg-black min-h-[40vh] lg:min-h-0 border-r border-zinc-250 dark:border-zinc-800">
           {post.media && post.media.length > 0 ? (
             post.media.some(m => m.media_type === 'video') ? (
@@ -277,13 +238,13 @@ export default function PostDetailClient({ id }) {
               <img src={post.media[0].media_url} alt="Attachment" className="max-w-full max-h-[80vh] object-contain" />
             )
           ) : (
-            <div className="p-8 text-center text-zinc-400 font-semibold italic">Text post layout</div>
+            <div className="p-8 text-center text-zinc-400 font-semibold italic select-none">Text post layout</div>
           )}
         </div>
 
-        {/* Right Side: Comments and details scroll box (Instagram Style) */}
+        {/* Right scrolling Comments & caption bar */}
         <div className="lg:col-span-5 flex flex-col h-full bg-white dark:bg-zinc-900 max-h-[85vh]">
-          {/* Header metadata details */}
+          {/* Header author details */}
           <div className="p-4 border-b border-zinc-150 dark:border-zinc-800 flex items-center space-x-3 shrink-0">
             {post.author.profile_picture ? (
               <img src={post.author.profile_picture} alt={post.author.username} className="h-10 w-10 rounded-full object-cover" />
@@ -300,9 +261,9 @@ export default function PostDetailClient({ id }) {
             </div>
           </div>
 
-          {/* Caption & Comments List scroll frame */}
+          {/* Comments list scrolling box */}
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            {/* Caption description */}
+            {/* Caption */}
             <div className="flex space-x-3 items-start border-b border-zinc-100 dark:border-zinc-800/80 pb-4">
               {post.author.profile_picture ? (
                 <img src={post.author.profile_picture} alt="Author" className="h-8 w-8 rounded-full object-cover shrink-0 mt-0.5" />
@@ -319,79 +280,50 @@ export default function PostDetailClient({ id }) {
               </div>
             </div>
 
-            {/* Comments Loop */}
+            {/* Render comments list */}
             <div className="space-y-4">
-              {comments.length === 0 ? (
-                <p className="text-center py-6 text-xs text-zinc-400 font-semibold">No comments yet. Write the first comment!</p>
-              ) : (
-                comments.map((comment) => (
-                  <div key={comment.id} className="flex flex-col space-y-2">
-                    <div className="flex space-x-3 items-start text-sm">
-                      {comment.author.profile_picture ? (
-                        <img src={comment.author.profile_picture} alt="Commenter" className="h-8 w-8 rounded-full object-cover shrink-0 mt-0.5" />
-                      ) : (
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0 mt-0.5">
-                          {comment.author.username?.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className="text-zinc-850 dark:text-zinc-200">
-                          <Link href={`/${comment.author.username}`} className="font-extrabold hover:underline mr-1">
-                            {comment.author.username}
-                          </Link>
-                          {comment.content}
-                        </p>
+              {comments.map((comment) => (
+                <CommentItem 
+                  key={comment.id}
+                  comment={comment}
+                  onReply={handleReplyClick}
+                  onDelete={handleCommentDelete}
+                  onEdit={handleCommentEdit}
+                />
+              ))}
 
-                        <div className="flex items-center space-x-4 text-xs text-zinc-500 mt-1 font-medium">
-                          <span>{new Date(comment.created_at).toLocaleDateString()}</span>
-                          <button 
-                            onClick={() => handleReplyClick(comment.id, comment.author.username)}
-                            className="hover:underline font-bold cursor-pointer"
-                          >
-                            Reply
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Comment Like toggle buttons */}
-                      <button className="text-zinc-400 hover:text-red-500 cursor-pointer">
-                        <Heart className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Collapsible Nested Replies panels */}
-                    {comment.reply_count > 0 && (
-                      <div className="pl-11">
-                        <button
-                          onClick={() => toggleRepliesDrawer(comment.id)}
-                          className="flex items-center space-x-1.5 text-xs font-black text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-350 cursor-pointer select-none"
-                        >
-                          {openReplies[comment.id] ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                          <span>
-                            {openReplies[comment.id] ? 'Hide replies' : `View replies (${comment.reply_count})`}
-                          </span>
-                        </button>
-                        
-                        {openReplies[comment.id] && (
-                          <RepliesList commentId={comment.id} onReplyTo={handleReplyClick} />
-                        )}
-                      </div>
+              {/* Load More Pagination controls */}
+              {hasNextComments && (
+                <div className="pt-2 text-center">
+                  <button
+                    onClick={handleLoadMoreComments}
+                    disabled={loadingComments}
+                    className="inline-flex items-center space-x-1 px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-full text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-350 bg-zinc-50/50 dark:bg-zinc-950/20 hover:bg-zinc-100 transition-colors cursor-pointer"
+                  >
+                    {loadingComments ? (
+                      <div className="h-3 w-3 rounded-full border border-zinc-300 border-t-primary animate-spin" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
                     )}
-                  </div>
-                ))
+                    <span>Load more comments</span>
+                  </button>
+                </div>
+              )}
+
+              {comments.length === 0 && !loadingComments && (
+                <p className="text-center py-6 text-xs text-zinc-400 font-semibold select-none">No comments yet. Write the first comment!</p>
               )}
             </div>
           </div>
 
-          {/* Action Row & liked status widget */}
+          {/* Action Row panel */}
           <div className="p-4 border-t border-zinc-150 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/10 space-y-2 shrink-0">
             <div className="flex items-center justify-between text-zinc-500">
               <div className="flex space-x-4">
                 <button onClick={handleLikeToggle} className="hover:text-red-500 transition-colors cursor-pointer">
                   <Heart className={`h-6 w-6 ${isLiked ? 'fill-red-500 text-red-500' : ''} ${animateHeart ? 'scale-125' : 'scale-100'} transition-transform`} />
                 </button>
-                <button onClick={() => commentInputRef.current.focus()} className="hover:text-primary transition-colors cursor-pointer">
+                <button className="hover:text-primary transition-colors cursor-pointer">
                   <MessageCircle className="h-6 w-6" />
                 </button>
                 <button className="hover:text-primary transition-colors cursor-pointer">
@@ -404,68 +336,22 @@ export default function PostDetailClient({ id }) {
               </button>
             </div>
 
-            {/* Like counts & Liker details string */}
+            {/* Like count summary */}
             <p className="text-xs font-extrabold text-zinc-800 dark:text-zinc-200 select-none">
               {getLikerSummaryString()}
             </p>
           </div>
 
-          {/* Comments & replies sticky typing forms */}
-          <div className="border-t border-zinc-150 dark:border-zinc-800 p-4 relative bg-white dark:bg-zinc-900 shrink-0">
-            {/* Reply Target Header banner */}
-            {replyTarget && (
-              <div className="flex items-center justify-between px-3 py-1 bg-primary/5 rounded-lg mb-2 text-xs text-primary font-semibold select-none">
-                <span>Replying to @{replyTarget.username}</span>
-                <button onClick={() => setReplyTarget(null)} className="p-0.5 rounded-full hover:bg-primary/10 cursor-pointer">
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-
-            {/* Emoji popover grid */}
-            {showEmojiPicker && (
-              <div ref={emojiRef} className="absolute bottom-[72px] left-4 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-850 rounded-2xl shadow-xl p-3 grid grid-cols-8 gap-2 z-30">
-                {emojis.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => handleAddEmoji(emoji)}
-                    className="h-8 w-8 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl flex items-center justify-center text-lg cursor-pointer"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <form onSubmit={handleCommentSubmit} className="flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-500 cursor-pointer"
-                aria-label="Add Emoji"
-              >
-                <Smile className="h-5 w-5" />
-              </button>
-              
-              <input
-                ref={commentInputRef}
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder={replyTarget ? "Write a reply..." : "Add a comment..."}
-                className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-zinc-900 dark:text-zinc-50 transition-all"
-              />
-
-              <button
-                type="submit"
-                disabled={!commentText.trim()}
-                className="p-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:bg-primary text-white rounded-xl shadow-md transition-all cursor-pointer shrink-0"
-                aria-label="Send Comment"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
-          </div>
+          {/* Comment composition footer typing inputs */}
+          <CommentInput
+            user={currentUser}
+            replyTarget={replyTarget}
+            onCancelReply={() => setReplyTarget(null)}
+            onSubmit={handleCommentSubmit}
+            commentText={commentText}
+            setCommentText={setCommentText}
+            submitting={submitting}
+          />
         </div>
       </div>
     </div>
