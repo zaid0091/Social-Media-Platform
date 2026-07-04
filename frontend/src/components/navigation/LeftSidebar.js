@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
 import api from '@/services/api';
+import useAuthStore from '@/store/useAuthStore';
 import Logo from './Logo';
 import UserDropdown from './UserDropdown';
 import NewPostButton from './NewPostButton';
@@ -22,14 +23,7 @@ const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function LeftSidebar() {
   const pathname = usePathname();
-
-  // Query backend notification unread count dynamically (poll every 30s)
-  const { data } = useSWR('/notifications/unread-count/', fetcher, {
-    refreshInterval: 30000,
-    revalidateOnFocus: true
-  });
-
-  const unreadCount = data?.unread_count || 0;
+  const unreadCount = useAuthStore((state) => state.unreadNotificationCount);
 
   const navItems = [
     { label: 'Home', href: '/', icon: Home },

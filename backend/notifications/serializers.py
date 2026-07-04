@@ -6,9 +6,17 @@ from stories.models import Story
 from .models import Notification
 
 class NotificationPostSerializer(serializers.ModelSerializer):
+    thumbnail_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Post
-        fields = ('id', 'content', 'post_type')
+        fields = ('id', 'content', 'post_type', 'thumbnail_url')
+
+    def get_thumbnail_url(self, obj):
+        first_media = obj.media.first()
+        if first_media:
+            return first_media.thumbnail_url or first_media.media_url
+        return None
 
 class NotificationCommentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,14 +34,27 @@ class NotificationSerializer(serializers.ModelSerializer):
     related_post = NotificationPostSerializer(read_only=True)
     related_comment = NotificationCommentSerializer(read_only=True)
     related_story = NotificationStorySerializer(read_only=True)
+    follow_request_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
         fields = (
             'id', 'recipient', 'sender', 'notification_type', 
             'related_post', 'related_comment', 'related_story', 
-            'is_read', 'created_at'
+            'is_read', 'created_at', 'follow_request_id'
         )
+
+    def get_follow_request_id(self, obj):
+        if obj.notification_type == 'follow':
+            from accounts.models import FollowRequest
+            freq = FollowRequest.objects.filter(
+                requester=obj.sender, 
+                receiver=obj.recipient, 
+                status='pending'
+            ).first()
+            if freq:
+                return freq.id
+        return None
 
 
 from .models import DeviceToken, UserNotificationPreference

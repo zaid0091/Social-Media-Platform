@@ -2,22 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import useSWR from 'swr';
-import api from '@/services/api';
+import useAuthStore from '@/store/useAuthStore';
 import { Home, Search, Bell, Mail, User } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function BottomNav() {
   const pathname = usePathname();
-
-  // Query unread count for notifications badge
-  const { data } = useSWR('/notifications/unread-count/', fetcher, {
-    refreshInterval: 30000,
-    revalidateOnFocus: true
-  });
-
-  const unreadCount = data?.unread_count || 0;
+  const unreadCount = useAuthStore((state) => state.unreadNotificationCount);
 
   const navItems = [
     { href: '/', icon: Home, label: 'Home' },
