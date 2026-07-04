@@ -37,6 +37,9 @@ export default function AuthInitializer({ children }) {
         const data = JSON.parse(event.data);
         if (data.type === 'notification') {
           incrementUnreadNotificationCount();
+          // Dispatch custom event for real-time notifications page prepend updates
+          const customEvent = new CustomEvent('new-notification-received', { detail: data.notification });
+          window.dispatchEvent(customEvent);
         }
       } catch (err) {}
     };

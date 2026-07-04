@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Bell, CheckSquare, Trash2, ArrowRightLeft } from 'lucide-react';
 import api from '@/services/api';
@@ -19,6 +19,34 @@ export default function NotificationsPage() {
     fetcher,
     { refreshInterval: 20000 }
   );
+
+  // Prepend new incoming notifications from WebSocket in real-time
+  useEffect(() => {
+    const handleNewNotification = (e) => {
+      const newNotif = e.detail;
+      if (!newNotif) return;
+      
+      mutate((currentData) => {
+        if (!currentData) {
+          return { count: 1, next: null, previous: null, results: [newNotif] };
+        }
+        // Avoid duplicate additions if SWR refetches in between
+        if (currentData.results?.some((n) => n.id === newNotif.id)) {
+          return currentData;
+        }
+        return {
+          ...currentData,
+          count: (currentData.count || 0) + 1,
+          results: [newNotif, ...(currentData.results || [])]
+        };
+      }, false);
+    };
+
+    window.addEventListener('new-notification-received', handleNewNotification);
+    return () => {
+      window.removeEventListener('new-notification-received', handleNewNotification);
+    };
+  }, [mutate]);
 
   const notifications = data?.results || [];
   const hasNext = !!data?.next;
