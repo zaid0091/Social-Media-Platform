@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import api from '@/services/api';
@@ -32,14 +32,25 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('posts');
 
   // 1. Fetch public profile details
+  const fetchUrl = username === 'profile' 
+    ? '/users/profile/' 
+    : `/users/profile/${username}/`;
+
   const { 
     data: profile, 
     error: profileError, 
     mutate: mutateProfile 
   } = useSWR(
-    username ? `/users/profile/${username}/` : null,
+    username ? fetchUrl : null,
     fetcher
   );
+
+  // Auto-redirect /profile to /[username] when currentUser is loaded
+  useEffect(() => {
+    if (typeof window !== 'undefined' && username === 'profile' && currentUser?.username) {
+      router.replace(`/${currentUser.username}`);
+    }
+  }, [username, currentUser, router]);
 
   // 2. Fetch profile posts (only if profile is accessible)
   const { 

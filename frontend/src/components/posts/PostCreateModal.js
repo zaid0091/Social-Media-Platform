@@ -118,7 +118,7 @@ export default function PostCreateModal() {
     return () => clearTimeout(timer);
   }, [hashtagQuery]);
 
-  if (!isPostCreateOpen) return null;
+
 
   // React Dropzone configuration (Step 1)
   const { getRootProps, getInputProps } = useDropzone({
@@ -274,6 +274,7 @@ export default function PostCreateModal() {
 
       try {
         const uploadRes = await api.post('/posts/upload-media/', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (progressEvent) => {
             const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(percent);
@@ -313,6 +314,8 @@ export default function PostCreateModal() {
       setUploading(false);
     }
   };
+
+  if (!isPostCreateOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
