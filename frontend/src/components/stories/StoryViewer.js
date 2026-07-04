@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Volume2, VolumeX, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Volume2, VolumeX, Heart, ChevronLeft, ChevronRight, FolderHeart } from 'lucide-react';
+import useSWR from 'swr';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 
@@ -21,6 +22,15 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
 
   const activeGroup = groups[groupIndex];
   const activeStory = activeGroup?.stories[storyIndex];
+
+  const [showHighlightPopover, setShowHighlightPopover] = useState(false);
+  const isOwnStory = activeGroup?.author?.id === currentUser?.id;
+
+  // Fetch highlights of this profile to support adding
+  const { data: ownHighlights = [], mutate: mutateOwnHighlights } = useSWR(
+    isOwnStory && currentUser?.username ? `/stories/highlights/user/${currentUser.username}/` : null,
+    (url) => api.get(url).then(r => r.data).catch(() => [])
+  );
 
   // Auto-reset story index when switching group index
   useEffect(() => {
@@ -124,6 +134,40 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
   const handleReactClick = () => {
     setReactAnimate(true);
     setTimeout(() => setReactAnimate(false), 800);
+  };
+
+  const handleAddToHighlight = async (highlight) => {
+    try {
+      const updatedStoryIds = [...highlight.stories.map(s => s.id), activeStory.id];
+      await api.patch(`/stories/highlights/${highlight.id}/update/`, {
+        stories: updatedStoryIds
+      });
+      mutateOwnHighlights();
+      setShowHighlightPopover(false);
+      setIsPaused(false);
+      alert(`Story successfully added to "${highlight.title}"!`);
+    } catch (err) {
+      alert('Failed to add story to highlight.');
+    }
+  };
+
+  const handleCreateHighlightFromStory = async () => {
+    const title = window.prompt("Enter new highlight title:");
+    if (!title || !title.trim()) return;
+
+    try {
+      await api.post('/stories/highlights/create/', {
+        title: title.trim(),
+        cover_image: activeStory.media_url,
+        stories: [activeStory.id]
+      });
+      mutateOwnHighlights();
+      setShowHighlightPopover(false);
+      setIsPaused(false);
+      alert(`Highlight "${title}" created successfully!`);
+    } catch (err) {
+      alert('Failed to create highlight.');
+    }
   };
 
   const timeAgoString = () => {
@@ -272,6 +316,70 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
               {activeStory.caption}
             </p>
             
+            {/* Folder Heart Add-to-Highlight Action */}
+            {isOwnStory && (
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPaused(true); // Pause stories progression while dropdown is open
+                    setShowHighlightPopover(!showHighlightPopover);
+                  }}
+                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md cursor-pointer select-none shrink-0 mb-1 z-35 flex items-center justify-center"
+                  aria-label="Add to Highlight"
+                >
+                  <FolderHeart className="h-5 w-5 hover:text-primary transition-colors" />
+                </button>
+
+                {showHighlightPopover && (
+                  <div 
+                    className="absolute bottom-12 right-0 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50 flex flex-col space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                    onClick={(e) => e.stopPropagation()} // Stop propagation to prevent tap area trigger
+                  >
+                    <div className="text-[10px] font-black uppercase text-zinc-550 px-2 py-1 tracking-wider border-b border-zinc-800/80">
+                      Add to Highlight
+                    </div>
+                    
+                    <div className="max-h-32 overflow-y-auto flex flex-col py-1 scrollbar-none">
+                      {ownHighlights && ownHighlights.map((hl) => (
+                        <button
+                          key={hl.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToHighlight(hl);
+                          }}
+                          className="w-full text-left px-2 py-1.5 hover:bg-zinc-800 rounded-lg text-xs font-semibold truncate transition-colors text-white"
+                        >
+                          {hl.title}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCreateHighlightFromStory();
+                      }}
+                      className="w-full text-left px-2 py-1.5 bg-zinc-950 hover:bg-zinc-850 rounded-lg text-xs font-bold text-primary transition-colors border-t border-zinc-800/80 pt-2 mt-1"
+                    >
+                      + New Highlight
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowHighlightPopover(false);
+                        setIsPaused(false); // Resume stories progression
+                      }}
+                      className="w-full text-center px-2 py-1 hover:bg-zinc-800 text-[10px] text-zinc-500 font-bold rounded-lg mt-1"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Heart React Action */}
             <button
               onClick={(e) => {

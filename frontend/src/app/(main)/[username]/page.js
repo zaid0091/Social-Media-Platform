@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
+import StoryViewer from '@/components/stories/StoryViewer';
 import { 
   Lock, 
   MapPin, 
@@ -16,7 +18,9 @@ import {
   Heart, 
   MessageCircle, 
   MessageSquare,
-  Globe
+  Globe,
+  Plus,
+  FolderHeart
 } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
@@ -47,6 +51,18 @@ export default function ProfilePage() {
   );
 
   const posts = postsData?.results || [];
+
+  const [isCreateHighlightOpen, setIsCreateHighlightOpen] = useState(false);
+  const [activeHighlight, setActiveHighlight] = useState(null);
+
+  // 2b. Fetch user highlights
+  const { 
+    data: highlights = [], 
+    mutate: mutateHighlights 
+  } = useSWR(
+    profile?.is_accessible ? `/stories/highlights/user/${profile.username}/` : null,
+    fetcher
+  );
 
   // 3. Follow/Unfollow handler with optimistic SWR mutations
   const handleFollowToggle = async () => {
@@ -241,6 +257,53 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* Highlights Section */}
+      {profile.is_accessible && (
+        <div className="px-6 pb-4 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 overflow-hidden select-none">
+          <div className="flex space-x-4 overflow-x-auto scrollbar-none py-1">
+            {/* Create New Highlight Bubble (only for own profile) */}
+            {isSelf && (
+              <div className="flex flex-col items-center space-y-1 shrink-0">
+                <button
+                  onClick={() => setIsCreateHighlightOpen(true)}
+                  className="h-14 w-14 rounded-full border border-zinc-300 dark:border-zinc-800 hover:border-primary flex items-center justify-center bg-zinc-50 dark:bg-zinc-900/45 cursor-pointer hover:scale-105 transition-all"
+                >
+                  <Plus className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+                </button>
+                <span className="text-[10px] text-zinc-550 dark:text-zinc-400 font-bold">New</span>
+              </div>
+            )}
+
+            {/* Existing Highlights */}
+            {highlights && highlights.map((highlight) => (
+              <div key={highlight.id} className="flex flex-col items-center space-y-1 shrink-0">
+                <button
+                  onClick={() => handleOpenHighlight(highlight)}
+                  className="h-14 w-14 rounded-full border border-zinc-250 dark:border-zinc-800 p-[2px] hover:border-primary flex items-center justify-center bg-zinc-55 dark:bg-zinc-900 overflow-hidden cursor-pointer hover:scale-105 transition-all"
+                >
+                  <div className="h-full w-full rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                    {highlight.cover_image ? (
+                      <img 
+                        src={highlight.cover_image} 
+                        alt={highlight.title} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                        <FolderHeart className="h-5 w-5 text-white" />
+                      </div>
+                    )}
+                  </div>
+                </button>
+                <span className="text-[10px] text-zinc-800 dark:text-zinc-300 font-bold truncate max-w-[65px]">
+                  {highlight.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 4. Navigation Tab Bar */}
       <div className="border-t border-zinc-200 dark:border-zinc-800 flex justify-center space-x-12 px-6">
         {[
@@ -334,6 +397,26 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Highlight Creator Modal */}
+      <HighlightCreateModal
+        isOpen={isCreateHighlightOpen}
+        onClose={() => setIsCreateHighlightOpen(false)}
+        onHighlightCreated={() => mutateHighlights()}
+      />
+
+      {/* Highlight Viewer Overlay */}
+      {activeHighlight && (
+        <StoryViewer
+          groups={[{
+            author: profile,
+            stories: activeHighlight.stories
+          }]}
+          initialGroupIndex={0}
+          onClose={() => setActiveHighlight(null)}
+          onStoryViewed={() => {}} // No-op
+        />
+      )}
     </div>
   );
 }

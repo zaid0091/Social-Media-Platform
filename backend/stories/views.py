@@ -261,3 +261,38 @@ class StoryHighlightDetailView(APIView):
             return Response({"error": "Highlight not found."}, status=status.HTTP_404_NOT_FOUND)
 
         return Response(StoryHighlightSerializer(highlight, context={'request': request}).data, status=status.HTTP_200_OK)
+
+class StoryArchiveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # Retrieve all stories created by the user, ordered by creation date desc
+        stories = Story.objects.filter(author=request.user).order_by('-created_at')
+        serializer = StorySerializer(stories, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class UserHighlightListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username, *args, **kwargs):
+        try:
+            target_user = User.objects.get(username__iexact=username, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=target_user) |
+            Q(blocker=target_user, blocked=request.user)
+        ).exists():
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Enforce private account policy: Only show highlights if user is self, or following, or public
+        is_self = (request.user == target_user)
+        is_following = Follow.objects.filter(follower=request.user, following=target_user).exists()
+        if target_user.is_private and not is_self and not is_following:
+            return Response([], status=status.HTTP_200_OK)
+
+        highlights = StoryHighlight.objects.filter(author=target_user)
+        serializer = StoryHighlightSerializer(highlights, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -134,7 +134,7 @@ export default function HomeFeedPage() {
       )}
 
       {/* 3. Horizontal Stories row */}
-      <StoriesBar onCreateStory={() => alert("Story creation is coming in Phase 44!")} />
+      <StoriesBar />
 
       {/* 4. Feed List area */}
       <div className="flex flex-col flex-1 divide-y divide-zinc-200 dark:divide-zinc-800">

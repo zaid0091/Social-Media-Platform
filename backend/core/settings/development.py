@@ -52,3 +52,12 @@ LOGGING = {
         },
     },
 }
+
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_RATES": {
+        **REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
+        "anon": "10000/day",
+        "user": "100000/day",
+    }
+}

@@ -175,6 +175,48 @@ class StoriesAPITests(TestCase):
         res = self.client.delete(f"/api/v1/stories/highlights/{highlight_id}/delete/")
         self.assertEqual(res.status_code, 200)
 
+    def test_story_archive_view(self):
+        # Create active and expired stories
+        Story.objects.create(
+            author=self.user,
+            media_url="https://res.cloudinary.com/demo/image/upload/story1.jpg",
+            media_type="image"
+        )
+        Story.objects.create(
+            author=self.user,
+            media_url="https://res.cloudinary.com/demo/image/upload/story2.jpg",
+            media_type="image",
+            is_expired=True
+        )
+
+        res = self.client.get("/api/v1/stories/archive/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 2)
+
+    def test_user_highlight_list_view(self):
+        story = Story.objects.create(
+            author=self.user,
+            media_url="https://res.cloudinary.com/demo/image/upload/story.jpg",
+            media_type="image"
+        )
+        highlight = StoryHighlight.objects.create(
+            author=self.user,
+            title="My Highlight"
+        )
+        highlight.stories.add(story)
+
+        # Retrieve list of highlights for self
+        res = self.client.get(f"/api/v1/stories/highlights/user/{self.user.username}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["title"], "My Highlight")
+
+        # Test block exclusion
+        self.client.force_authenticate(user=self.viewer)
+        BlockedUser.objects.create(blocker=self.user, blocked=self.viewer)
+        res = self.client.get(f"/api/v1/stories/highlights/user/{self.user.username}/")
+        self.assertEqual(res.status_code, 404)
+
     def test_hourly_expiry_celery_task(self):
         # Create story that expires in the past
         story = Story.objects.create(
