@@ -2,12 +2,14 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Search } from 'lucide-react';
 import useAuthStore from '@/store/useAuthStore';
-import { Home, Search, Bell, Mail, BookOpen, User, ShieldAlert, LogOut } from 'lucide-react';
+import LeftSidebar from '@/components/navigation/LeftSidebar';
+import BottomNav from '@/components/navigation/BottomNav';
+import CreatePostFAB from '@/components/navigation/CreatePostFAB';
 
 export default function MainLayout({ children }) {
-  const { user, isAuthenticated, loading, checkAuth, logout } = useAuthStore();
+  const { isAuthenticated, loading, checkAuth } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
@@ -35,81 +37,15 @@ export default function MainLayout({ children }) {
     return null;
   }
 
-  const navItems = [
-    { label: 'Home', href: '/', icon: Home },
-    { label: 'Explore', href: '/search', icon: Search },
-    { label: 'Notifications', href: '/notifications', icon: Bell },
-    { label: 'Messages', href: '/messaging', icon: Mail },
-    { label: 'Stories', href: '/stories', icon: BookOpen },
-    { label: 'Profile', href: '/profile', icon: User },
-  ];
-
-  if (user?.is_staff || user?.is_superuser) {
-    navItems.push({ label: 'Admin', href: '/admin', icon: ShieldAlert });
-  }
-
-  const handleLogout = async () => {
-    await logout();
-    router.push('/login');
-  };
-
   return (
-    <div className="min-h-screen w-full flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-200 pb-16 md:pb-0">
+    <div className="min-h-screen w-full flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-200">
       <div className="w-full max-w-7xl mx-auto flex min-h-screen relative">
         
         {/* Left Column: Sidebar Navigation (Desktop) */}
-        <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-zinc-200 dark:border-zinc-800 p-4 justify-between bg-white dark:bg-zinc-900/40 backdrop-blur-xl">
-          <div className="flex flex-col space-y-8">
-            {/* Brand Logo */}
-            <div className="px-4 py-2">
-              <span className="text-2xl font-black bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                PLATFORM
-              </span>
-            </div>
-            
-            {/* Navigation links */}
-            <nav className="flex flex-col space-y-1.5">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center space-x-4 px-4 py-3 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-all group"
-                  >
-                    <Icon className="h-5 w-5 text-zinc-500 group-hover:text-primary transition-colors" />
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-zinc-50 transition-colors">
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* User Profile & Logout Widget */}
-          <div className="flex flex-col space-y-4 p-2 border-t border-zinc-200 dark:border-zinc-800 pt-4">
-            <div className="flex items-center space-x-3 px-2">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold shrink-0">
-                {user?.username?.charAt(0).toUpperCase()}
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="font-bold truncate text-sm leading-tight">{user?.full_name || user?.username}</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">@{user?.username}</span>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-4 px-4 py-3 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all group w-full"
-            >
-              <LogOut className="h-5 w-5 text-red-500" />
-              <span className="font-semibold">Logout</span>
-            </button>
-          </div>
-        </aside>
+        <LeftSidebar />
 
         {/* Center Column: Page Content Area */}
-        <main className="flex-1 min-w-0 min-h-screen bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800">
+        <main className="flex-1 min-w-0 min-h-screen bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 pb-16 md:pb-0">
           {children}
         </main>
 
@@ -173,20 +109,10 @@ export default function MainLayout({ children }) {
       </div>
 
       {/* Sticky Bottom Navigation Bar (Mobile only) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-around z-50 px-2">
-        {navItems.slice(0, 5).map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex flex-col items-center justify-center p-2 text-zinc-500 hover:text-primary transition-colors"
-            >
-              <Icon className="h-5.5 w-5.5" />
-            </Link>
-          );
-        })}
-      </div>
+      <BottomNav />
+
+      {/* Floating Action Button (Mobile only) */}
+      <CreatePostFAB />
     </div>
   );
 }
