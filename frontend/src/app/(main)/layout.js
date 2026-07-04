@@ -54,7 +54,7 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="min-h-screen w-full flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-200">
-      <div className="w-full max-w-7xl mx-auto flex min-h-screen relative">
+      <div className="w-full flex min-h-screen relative">
         
         {/* Left Column: Sidebar Navigation (Desktop) */}
         <LeftSidebar />
