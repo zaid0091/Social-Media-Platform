@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import axios from 'axios';
 import api from '../services/api';
 
 const useAuthStore = create((set, get) => ({
@@ -10,7 +11,8 @@ const useAuthStore = create((set, get) => ({
   login: async (username, password) => {
     set({ loading: true });
     try {
-      const response = await api.post('/auth/login/', { username, password });
+      // Call local Next.js API proxy instead of backend directly
+      const response = await axios.post('/api/auth/login/', { username, password });
       const { access_token, user } = response.data;
       
       if (typeof window !== 'undefined') {
@@ -38,7 +40,8 @@ const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try {
-      await api.post('/auth/logout/');
+      // Call local Next.js API proxy to clear httpOnly cookies
+      await axios.post('/api/auth/logout/');
     } catch (e) {
       // Ignored for offline safety
     }
