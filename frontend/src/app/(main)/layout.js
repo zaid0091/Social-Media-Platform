@@ -14,7 +14,7 @@ import PostCreateModal from '@/components/posts/PostCreateModal';
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function MainLayout({ children }) {
-  const { isAuthenticated, loading, checkAuth } = useAuthStore();
+  const { isAuthenticated, isLoading, refreshSession } = useAuthStore();
   const router = useRouter();
 
   // SWR queries for Right Sidebar
@@ -36,16 +36,18 @@ export default function MainLayout({ children }) {
   };
 
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    if (!isAuthenticated && !isLoading) {
+      refreshSession();
+    }
+  }, [isAuthenticated, isLoading, refreshSession]);
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated) {
       router.push('/login');
     }
-  }, [loading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, router]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 transition-colors duration-200">
         <div className="flex flex-col items-center space-y-4">
