@@ -7,6 +7,7 @@ import useAuthStore from '@/store/useAuthStore';
 import LeftSidebar from '@/components/navigation/LeftSidebar';
 import BottomNav from '@/components/navigation/BottomNav';
 import CreatePostFAB from '@/components/navigation/CreatePostFAB';
+import PostCreateModal from '@/components/posts/PostCreateModal';
 
 export default function MainLayout({ children }) {
   const { isAuthenticated, loading, checkAuth } = useAuthStore();
@@ -113,6 +114,9 @@ export default function MainLayout({ children }) {
 
       {/* Floating Action Button (Mobile only) */}
       <CreatePostFAB />
+
+      {/* Global Post Creation Modal overlay */}
+      <PostCreateModal />
     </div>
   );
 }

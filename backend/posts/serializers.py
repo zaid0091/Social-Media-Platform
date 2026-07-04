@@ -59,14 +59,80 @@ class PostSerializer(serializers.ModelSerializer):
         return Follow.objects.filter(follower=request.user, following=obj.author).exists()
 
 class PostCreateSerializer(serializers.ModelSerializer):
+    media = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        write_only=True
+    )
+
     class Meta:
         model = Post
-        fields = ('content', 'privacy', 'post_type')
+        fields = ('content', 'privacy', 'post_type', 'media')
         extra_kwargs = {
             'content': {'required': False, 'allow_blank': True},
             'privacy': {'required': False},
             'post_type': {'required': False}
         }
+
+    def create(self, validated_data):
+        media_data = validated_data.pop('media', [])
+        
+        # Determine post type automatically if media is provided
+        if media_data:
+            types = {item.get('media_type', 'image') for item in media_data}
+            if len(types) > 1:
+                validated_data['post_type'] = 'mixed'
+            elif 'video' in types:
+                validated_data['post_type'] = 'video'
+            else:
+                validated_data['post_type'] = 'image'
+        else:
+            validated_data['post_type'] = 'text'
+
+        post = super().create(validated_data)
+
+        for index, item in enumerate(media_data):
+            PostMedia.objects.create(
+                post=post,
+                media_url=item.get('media_url'),
+                media_type=item.get('media_type', 'image'),
+                order=item.get('order', index),
+                thumbnail_url=item.get('thumbnail_url'),
+                duration=item.get('duration')
+            )
+        return post
+
+    def update(self, instance, validated_data):
+        media_data = validated_data.pop('media', None)
+        
+        # Determine post type automatically if media is provided
+        if media_data is not None:
+            if media_data:
+                types = {item.get('media_type', 'image') for item in media_data}
+                if len(types) > 1:
+                    validated_data['post_type'] = 'mixed'
+                elif 'video' in types:
+                    validated_data['post_type'] = 'video'
+                else:
+                    validated_data['post_type'] = 'image'
+            else:
+                validated_data['post_type'] = 'text'
+
+        post = super().update(instance, validated_data)
+
+        if media_data is not None:
+            # Recreate media associations
+            instance.media.all().delete()
+            for index, item in enumerate(media_data):
+                PostMedia.objects.create(
+                    post=post,
+                    media_url=item.get('media_url'),
+                    media_type=item.get('media_type', 'image'),
+                    order=item.get('order', index),
+                    thumbnail_url=item.get('thumbnail_url'),
+                    duration=item.get('duration')
+                )
+        return post
 
 class CommentSerializer(serializers.ModelSerializer):
     author = UserFollowDetailsSerializer(read_only=True)
