@@ -594,6 +594,41 @@ class FeedView(APIView):
                 "results": serializer.data
             }, status=status.HTTP_200_OK)
 
+class PostExploreView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        category = request.query_params.get('category', 'for_you').lower()
+
+        # Exclude blocked users
+        blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        all_blocked = set(list(blocked_users) + list(blockers))
+
+        posts = Post.objects.filter(
+            is_deleted=False,
+            is_hidden=False,
+            needs_review=False,
+            privacy='public'
+        ).exclude(author_id__in=all_blocked)
+
+        if category == 'photos':
+            posts = posts.filter(Q(post_type='image') | Q(post_type='mixed'))
+        elif category == 'videos':
+            posts = posts.filter(post_type='video')
+
+        # Sorting: trending groups by highest likes and comments, others by timeline
+        if category == 'trending':
+            posts = posts.order_by('-like_count', '-comment_count', '-created_at')
+        else:
+            posts = posts.order_by('-created_at')
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 12
+        result_page = paginator.paginate_queryset(posts.distinct(), request)
+        serializer = PostSerializer(result_page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
 
 
 
