@@ -196,7 +196,7 @@ export default function ProfilePage() {
             ) : (
               <>
                 <button
-                  onClick={() => router.push(`/messaging?userId=${profile.id}`)}
+                  onClick={() => router.push(`/messages?userId=${profile.id}`)}
                   className="p-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-650 hover:text-zinc-900 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                   aria-label="Send Message"
                 >

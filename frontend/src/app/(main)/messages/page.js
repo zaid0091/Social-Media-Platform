@@ -29,6 +29,28 @@ function MessagesClient() {
 
   const conversationsList = data?.results || [];
 
+  // Handle direct conversation creation if redirected from a user profile (?userId=...)
+  const targetUserId = searchParams.get('userId');
+  useEffect(() => {
+    if (targetUserId) {
+      const getOrCreateDirectConversation = async () => {
+        try {
+          const response = await api.post('/messaging/conversations/create/', {
+            recipient_id: targetUserId
+          });
+          const newConv = response.data;
+          // Refresh list cache
+          mutate();
+          // Navigate to new conversation view
+          router.push(`/messages?c=${newConv.id}`);
+        } catch (err) {
+          console.error('Failed to get/create direct conversation', err);
+        }
+      };
+      getOrCreateDirectConversation();
+    }
+  }, [targetUserId, router, mutate]);
+
   // Listen to real-time custom message events to revalidate list cache instantly
   useEffect(() => {
     const handleNewMessage = () => {
