@@ -9,6 +9,7 @@ import useAuthStore from '@/store/useAuthStore';
 import Logo from './Logo';
 import UserDropdown from './UserDropdown';
 import NewPostButton from './NewPostButton';
+import ThemeToggle from '../ThemeToggle';
 import { 
   Home, 
   Search, 
@@ -113,8 +114,9 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      {/* User profile details dropdown */}
-      <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 flex justify-center xl:block">
+      {/* User profile details dropdown & theme toggler */}
+      <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 flex flex-col space-y-4 items-center xl:items-stretch">
+        <ThemeToggle className="self-center xl:self-start w-10 h-10" />
         <UserDropdown />
       </div>
     </aside>

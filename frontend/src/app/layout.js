@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import AuthInitializer from "@/components/AuthInitializer";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -29,13 +30,16 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-light-bg text-foreground dark:bg-dark-bg transition-colors duration-200">
-        <AuthInitializer>
-          {children}
-          <Toaster position="bottom-right" theme="dark" closeButton />
-        </AuthInitializer>
+        <ThemeProvider>
+          <AuthInitializer>
+            {children}
+            <Toaster position="bottom-right" theme="dark" closeButton />
+          </AuthInitializer>
+        </ThemeProvider>
       </body>
     </html>
   );

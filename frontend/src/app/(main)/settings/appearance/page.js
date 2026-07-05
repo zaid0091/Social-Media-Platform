@@ -1,41 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { Paintbrush, Sun, Moon, Monitor, Check, Save } from 'lucide-react';
 
 export default function AppearanceSettingsPage() {
-  const [theme, setTheme] = useState('system'); // 'light' | 'dark' | 'system'
+  const { theme, setTheme } = useTheme();
   const [fontSize, setFontSize] = useState('14px'); // '12px' | '14px' | '16px' | '18px'
   const [toast, setToast] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Load preferences
+  // Avoid hydration mismatch by waiting for client mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('theme');
-      if (savedTheme) setTheme(savedTheme);
-
-      const savedSize = localStorage.getItem('font-size');
-      if (savedSize) setFontSize(savedSize);
-    }
+    setMounted(true);
+    const savedSize = localStorage.getItem('font-size');
+    if (savedSize) setFontSize(savedSize);
   }, []);
-
-  const applyTheme = (targetTheme) => {
-    if (typeof window === 'undefined') return;
-
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (targetTheme === 'dark') {
-      root.classList.add('dark');
-    } else if (targetTheme === 'light') {
-      root.classList.add('light');
-    } else {
-      // System
-      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (systemDark) root.classList.add('dark');
-      else root.classList.add('light');
-    }
-  };
 
   const applyFontSize = (size) => {
     if (typeof window === 'undefined') return;
@@ -49,15 +29,21 @@ export default function AppearanceSettingsPage() {
   };
 
   const handleSaveAppearance = () => {
-    localStorage.setItem('theme', theme);
     localStorage.setItem('font-size', fontSize);
-
-    applyTheme(theme);
     applyFontSize(fontSize);
 
     setToast(true);
     setTimeout(() => setToast(false), 3000);
   };
+
+  if (!mounted) {
+    return (
+      <div className="space-y-6 text-left animate-pulse">
+        <div className="h-8 w-1/3 bg-zinc-200 dark:bg-zinc-800 rounded" />
+        <div className="h-40 bg-zinc-200 dark:bg-zinc-800 rounded-3xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 text-left">
