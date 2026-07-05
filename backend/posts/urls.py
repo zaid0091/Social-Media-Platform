@@ -4,7 +4,8 @@ from .views import (
     PostDeleteView, UserPostListView, PostMediaUploadView,
     LikeView, CommentLikeView, BookmarkView, BookmarkListView, PostLikerListView,
     CommentListCreateView, CommentRepliesView, CommentUpdateView, CommentDeleteView,
-    FeedView, PostExploreView
+    FeedView, PostExploreView,
+    CollectionListCreateView, CollectionDetailView, CollectionAddPostView, CollectionRemovePostView
 )
 
 urlpatterns = [
@@ -22,6 +23,10 @@ urlpatterns = [
     path('comment-like/<uuid:comment_id>/', CommentLikeView.as_view(), name='comment-like-toggle'),
     path('bookmark/<uuid:post_id>/', BookmarkView.as_view(), name='bookmark-toggle'),
     path('bookmarks/', BookmarkListView.as_view(), name='bookmark-list'),
+    path('collections/', CollectionListCreateView.as_view(), name='collection-list-create'),
+    path('collections/<uuid:collection_id>/', CollectionDetailView.as_view(), name='collection-detail'),
+    path('collections/<uuid:collection_id>/add/<uuid:post_id>/', CollectionAddPostView.as_view(), name='collection-add-post'),
+    path('collections/<uuid:collection_id>/remove/<uuid:post_id>/', CollectionRemovePostView.as_view(), name='collection-remove-post'),
     path('<uuid:post_id>/likers/', PostLikerListView.as_view(), name='post-likers'),
 
     # Comment endpoints

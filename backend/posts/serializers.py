@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from accounts.serializers import UserFollowDetailsSerializer
 from accounts.models import Follow
-from .models import Post, PostMedia, Like, Bookmark, Comment
+from .models import Post, PostMedia, Like, Bookmark, Comment, Collection
 
 User = get_user_model()
 
@@ -164,4 +164,32 @@ class CommentCreateSerializer(serializers.ModelSerializer):
         if parent and parent.post != post:
             raise serializers.ValidationError("Parent comment must belong to the same post.")
         return attrs
+
+
+class CollectionSerializer(serializers.ModelSerializer):
+    post_count = serializers.IntegerField(source='posts.count', read_only=True)
+    post_ids = serializers.PrimaryKeyRelatedField(many=True, read_only=True, source='posts')
+    cover_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Collection
+        fields = ('id', 'name', 'post_count', 'post_ids', 'cover_image', 'created_at')
+        read_only_fields = ('id', 'created_at')
+
+    def get_cover_image(self, obj):
+        first_post = obj.posts.prefetch_related('media').first()
+        if first_post:
+            first_media = first_post.media.first()
+            if first_media:
+                return first_media.media_url
+        return None
+
+
+class CollectionDetailSerializer(serializers.ModelSerializer):
+    posts = PostSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Collection
+        fields = ('id', 'name', 'posts', 'created_at')
+        read_only_fields = ('id', 'created_at')
 

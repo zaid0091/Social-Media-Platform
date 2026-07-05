@@ -13,12 +13,14 @@ import {
   EyeOff, 
   AlertTriangle,
   Link as LinkIcon,
-  Check
+  Check,
+  X
 } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import CarouselComponent from './CarouselComponent';
 import VideoPlayer from './VideoPlayer';
+import BookmarkActionMenu from './BookmarkActionMenu';
 
 // Helper to format timestamps to relative time
 const getRelativeTime = (dateString) => {
@@ -45,12 +47,15 @@ export default function PostCard({ post, onDelete }) {
   const [isBookmarked, setIsBookmarked] = useState(post.is_bookmarked);
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isBookmarkMenuOpen, setIsBookmarkMenuOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [animateHeart, setAnimateHeart] = useState(false);
   const [toast, setToast] = useState(null);
 
   const menuRef = useRef(null);
+  const bookmarkRef = useRef(null);
 
   // Sync state if props change
   useEffect(() => {
@@ -59,11 +64,14 @@ export default function PostCard({ post, onDelete }) {
     setIsBookmarked(post.is_bookmarked);
   }, [post]);
 
-  // Click outside listener to auto-close options dropdown
+  // Click outside listener to auto-close options dropdown and bookmark menu
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setIsMenuOpen(false);
+      }
+      if (bookmarkRef.current && !bookmarkRef.current.contains(e.target)) {
+        setIsBookmarkMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -132,16 +140,33 @@ export default function PostCard({ post, onDelete }) {
   };
 
   // Optimistic Bookmark toggles
-  const handleBookmarkToggle = async (e) => {
-    e.stopPropagation();
+  const handleBookmarkClick = async (e) => {
+    if (e) e.stopPropagation();
     const wasBookmarked = isBookmarked;
 
-    setIsBookmarked(!wasBookmarked);
+    if (!wasBookmarked) {
+      setIsBookmarked(true);
+      try {
+        await api.post(`/posts/bookmark/${post.id}/`);
+        setIsBookmarkMenuOpen(true);
+      } catch (err) {
+        setIsBookmarked(false);
+      }
+    } else {
+      setIsBookmarkMenuOpen(!isBookmarkMenuOpen);
+    }
+  };
 
+  const handleConfirmRemove = async () => {
+    setIsConfirmOpen(false);
+    setIsBookmarked(false);
+    setIsBookmarkMenuOpen(false);
     try {
       await api.post(`/posts/bookmark/${post.id}/`);
+      setToast('Removed from bookmarks');
+      setTimeout(() => setToast(null), 2500);
     } catch (err) {
-      setIsBookmarked(wasBookmarked);
+      setIsBookmarked(true);
     }
   };
 
@@ -238,6 +263,22 @@ export default function PostCard({ post, onDelete }) {
 
           {isMenuOpen && (
             <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-25 py-1 text-sm font-semibold overflow-hidden">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMenuOpen(false);
+                  if (isBookmarked) {
+                    setIsConfirmOpen(true);
+                  } else {
+                    handleBookmarkClick();
+                  }
+                }}
+                className="w-full text-left px-4 py-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
+              >
+                <Bookmark className={`h-4 w-4 ${isBookmarked ? 'fill-primary text-primary' : ''}`} />
+                <span>{isBookmarked ? 'Remove Bookmark' : 'Bookmark'}</span>
+              </button>
+
               {isOwnPost ? (
                 <button
                   onClick={handleDeletePost}
@@ -356,17 +397,58 @@ export default function PostCard({ post, onDelete }) {
           </button>
         </div>
 
-        {/* Bookmark controls */}
-        <button 
-          onClick={handleBookmarkToggle}
-          className={`flex items-center hover:text-primary transition-colors cursor-pointer select-none ${
-            isBookmarked ? 'text-primary' : 'text-zinc-500'
-          }`}
-          aria-label="Bookmark Post"
-        >
-          <Bookmark className={`h-5 w-5 ${isBookmarked ? 'fill-primary text-primary' : ''}`} />
-        </button>
+        {/* Bookmark controls with Collections popover wrapper */}
+        <div className="relative" ref={bookmarkRef}>
+          <button 
+            onClick={handleBookmarkClick}
+            className={`flex items-center hover:text-primary transition-colors cursor-pointer select-none ${
+              isBookmarked ? 'text-primary' : 'text-zinc-500'
+            }`}
+            aria-label="Bookmark Post"
+          >
+            <Bookmark className={`h-5 w-5 ${isBookmarked ? 'fill-primary text-primary' : ''}`} />
+          </button>
+
+          {isBookmarkMenuOpen && (
+            <BookmarkActionMenu
+              post={{ ...post, is_bookmarked: isBookmarked }}
+              onClose={() => setIsBookmarkMenuOpen(false)}
+              onBookmarkToggle={(val) => setIsBookmarked(val)}
+              onRemoveConfirm={(e) => {
+                e.stopPropagation();
+                setIsConfirmOpen(true);
+              }}
+            />
+          )}
+        </div>
       </div>
+
+      {/* Remove Bookmark Confirmation Modal overlay */}
+      {isConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-xs rounded-2.5xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-5 text-center flex flex-col items-center">
+            <Bookmark className="h-10 w-10 text-red-500 mb-3 animate-bounce" />
+            <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Remove Bookmark?</h4>
+            <p className="text-[10px] text-zinc-400 font-semibold mt-1.5 leading-relaxed">
+              This post will be removed from your saved bookmarks and any collection folders it belongs to.
+            </p>
+            <div className="flex w-full space-x-3 mt-4">
+              <button
+                onClick={() => setIsConfirmOpen(false)}
+                className="flex-1 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-850 text-[10px] font-black text-zinc-500 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRemove}
+                className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-650 text-[10px] font-black text-white shadow-md transition cursor-pointer"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

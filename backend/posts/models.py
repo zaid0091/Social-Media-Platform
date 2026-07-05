@@ -125,3 +125,20 @@ class PostView(models.Model):
     def __str__(self):
         return f"View of Post {self.post.id} (user: {self.user.username if self.user else 'Anonymous'})"
 
+
+class Collection(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='collections')
+    name = models.CharField(max_length=100)
+    posts = models.ManyToManyField(Post, related_name='collections')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_user_collections')
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Collection {self.name} by {self.user.username}"
+

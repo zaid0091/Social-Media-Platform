@@ -8,8 +8,8 @@ from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
 from accounts.models import Follow, BlockedUser
 from hashtags.models import Hashtag, PostHashtag
-from .models import Post
-from .serializers import PostSerializer, PostCreateSerializer
+from .models import Post, Bookmark, Collection
+from .serializers import PostSerializer, PostCreateSerializer, CollectionSerializer, CollectionDetailSerializer
 
 User = get_user_model()
 
@@ -298,6 +298,9 @@ class BookmarkView(APIView):
         bookmark_filter = Bookmark.objects.filter(user=request.user, post=post)
         if bookmark_filter.exists():
             bookmark_filter.delete()
+            # Cascade delete from user's collections
+            for collection in Collection.objects.filter(user=request.user, posts=post):
+                collection.posts.remove(post)
             bookmarked = False
         else:
             Bookmark.objects.create(user=request.user, post=post)
@@ -628,6 +631,89 @@ class PostExploreView(APIView):
         result_page = paginator.paginate_queryset(posts.distinct(), request)
         serializer = PostSerializer(result_page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
+
+
+class CollectionListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        collections = Collection.objects.filter(user=request.user)
+        serializer = CollectionSerializer(collections, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, *args, **kwargs):
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response({"error": "Collection name is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if Collection.objects.filter(user=request.user, name__iexact=name).exists():
+            return Response({"error": "A collection with this name already exists."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        collection = Collection.objects.create(user=request.user, name=name)
+        serializer = CollectionSerializer(collection, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class CollectionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, collection_id, *args, **kwargs):
+        try:
+            collection = Collection.objects.get(id=collection_id, user=request.user)
+        except Collection.DoesNotExist:
+            return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        serializer = CollectionDetailSerializer(collection, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, collection_id, *args, **kwargs):
+        try:
+            collection = Collection.objects.get(id=collection_id, user=request.user)
+        except Collection.DoesNotExist:
+            return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        collection.delete()
+        return Response({"message": "Collection deleted successfully."}, status=status.HTTP_200_OK)
+
+
+class CollectionAddPostView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, collection_id, post_id, *args, **kwargs):
+        try:
+            collection = Collection.objects.get(id=collection_id, user=request.user)
+        except Collection.DoesNotExist:
+            return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Auto-bookmark the post if not already bookmarked
+        Bookmark.objects.get_or_create(user=request.user, post=post)
+        
+        # Add post to collection
+        collection.posts.add(post)
+        return Response({"message": "Post added to collection successfully."}, status=status.HTTP_200_OK)
+
+
+class CollectionRemovePostView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, collection_id, post_id, *args, **kwargs):
+        try:
+            collection = Collection.objects.get(id=collection_id, user=request.user)
+        except Collection.DoesNotExist:
+            return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        collection.posts.remove(post)
+        return Response({"message": "Post removed from collection successfully."}, status=status.HTTP_200_OK)
 
 
 
