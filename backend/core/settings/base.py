@@ -142,10 +142,7 @@ REST_FRAMEWORK = {
 # Django Channels Layers Configuration
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [env.str("REDIS_URL", "redis://localhost:6379/0?protocol=2")],
-        },
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
 

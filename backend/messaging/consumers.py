@@ -48,7 +48,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
             await self.accept()
-        except Exception:
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             await self.close()
 
     def verify_membership(self):

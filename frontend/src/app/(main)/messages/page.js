@@ -29,6 +29,17 @@ function MessagesClient() {
 
   const conversationsList = data?.results || [];
 
+  // Listen to real-time custom message events to revalidate list cache instantly
+  useEffect(() => {
+    const handleNewMessage = () => {
+      mutate();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('chat-message-received', handleNewMessage);
+      return () => window.removeEventListener('chat-message-received', handleNewMessage);
+    }
+  }, [mutate]);
+
   // Filter conversations locally based on search query
   const filteredConversations = conversationsList.filter((c) => {
     if (!searchQuery.trim()) return true;

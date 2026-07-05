@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Phone, Video, Info, Send, Smile, Paperclip, 
-  MoreVertical, Reply, CornerUpRight, Trash2, CheckCheck, Check, SmilePlus
+  MoreVertical, Reply, Trash2, CheckCheck, Check, SmilePlus, X
 } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import useChatSocket from '@/hooks/useChatSocket';
 
 // Common emojis for quick reaction picker
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -32,154 +33,185 @@ export default function ChatWindow({ conversationId, onGoBack }) {
   // Real-time states
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [otherTypingUser, setOtherTypingUser] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
 
   // Popup overlay states
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [activeReactionPickerId, setActiveReactionPickerId] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  const socketRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
 
   // Fetch initial details and messages
-  useEffect(() => {
-    if (!conversationId) return;
-
-    const fetchConversationDetails = async () => {
-      setLoading(true);
-      try {
-        const response = await api.get(`/messaging/conversations/${conversationId}/`);
-        setConversation(response.data.conversation);
-        
-        // Reverse messages since backend returns newest first
-        const fetchedMessages = response.data.messages?.results || [];
-        setMessages(fetchedMessages.reverse());
-        setNextCursorUrl(response.data.messages?.next || null);
-      } catch (err) {
-        console.error('Failed to load chat details', err);
-      } finally {
+  const fetchConversationDetails = async (isInitial = true) => {
+    if (isInitial) setLoading(true);
+    try {
+      const response = await api.get(`/messaging/conversations/${conversationId}/`);
+      setConversation(response.data.conversation);
+      
+      // Reverse messages since backend returns newest first
+      const fetchedMessages = response.data.messages?.results || [];
+      setMessages(fetchedMessages.reverse());
+      setNextCursorUrl(response.data.messages?.next || null);
+    } catch (err) {
+      console.error('Failed to load chat details', err);
+    } finally {
+      if (isInitial) {
         setLoading(false);
-        // Scroll to bottom on mount
+        // Scroll to bottom on initial mount
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
         }, 100);
       }
-    };
+    }
+  };
 
-    fetchConversationDetails();
+  useEffect(() => {
+    if (conversationId) {
+      fetchConversationDetails(true);
+    }
   }, [conversationId]);
 
-  // Establish WebSocket connection
-  useEffect(() => {
-    if (!conversationId || !accessToken) return;
+  const handleIncomingMessage = (newMsg) => {
+    const isMyMessage = newMsg.sender?.id === currentUser?.id || 
+                        (newMsg.sender?.username && newMsg.sender?.username === currentUser?.username);
 
-    const wsUrl = `ws://127.0.0.1:8000/ws/chat/${conversationId}/?token=${accessToken}`;
-    const ws = new WebSocket(wsUrl);
-    socketRef.current = ws;
-    setConnectionStatus('connecting');
-
-    ws.onopen = () => {
-      setConnectionStatus('connected');
-      // Mark existing messages as read on connect
-      ws.send(JSON.stringify({ type: 'read_receipt' }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'message') {
-          const newMsg = data.message;
-          setMessages((prev) => {
-            // Prevent duplicate message renders
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-
-          // Send read receipt if we are the recipient of the message
-          if (newMsg.sender?.id !== currentUser?.id) {
-            ws.send(JSON.stringify({ type: 'read_receipt' }));
-          }
-
-          // Smooth scroll to bottom
-          setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          }, 50);
-
-        } else if (data.type === 'typing') {
-          if (data.sender_id !== currentUser?.id) {
-            setIsOtherTyping(data.is_typing);
-            setOtherTypingUser(data.username);
-          }
-        } else if (data.type === 'read_receipt') {
-          // Update all messages sent by current user to is_read: true
-          if (data.reader_id !== currentUser?.id) {
-            setMessages((prev) => 
-              prev.map((m) => m.sender?.id === currentUser?.id ? { ...m, is_read: true } : m)
-            );
-          }
-        } else if (data.type === 'reaction') {
-          setMessages((prev) => 
-            prev.map((m) => {
-              if (m.id === data.message_id) {
-                // If action is removed, filter out. If added, add or update reaction.
-                let updatedReactions = m.reactions || [];
-                if (data.action === 'removed') {
-                  updatedReactions = updatedReactions.filter(
-                    (r) => !(r.username === data.username && r.emoji === data.emoji)
-                  );
-                } else {
-                  // Filter existing for this user, then append new emoji reaction
-                  updatedReactions = updatedReactions.filter((r) => r.username !== data.username);
-                  updatedReactions.push({
-                    user_id: data.user_id,
-                    username: data.username,
-                    emoji: data.emoji
-                  });
-                }
-                return { ...m, reactions: updatedReactions };
-              }
-              return m;
-            })
-          );
+    setMessages((prev) => {
+      // 1. If it's our own message, check if there's a pending optimistic message we can resolve
+      if (isMyMessage) {
+        const pendingIndex = prev.findIndex(
+          (m) => m.status === 'pending' && 
+                 m.content === newMsg.content && 
+                 (m.media_url || '') === (newMsg.media_url || '')
+        );
+        if (pendingIndex !== -1) {
+          const updated = [...prev];
+          updated[pendingIndex] = { ...newMsg, status: 'sent' }; // Replace optimistic with real
+          return updated;
         }
-      } catch (err) {
-        console.error('Failed to parse chat socket message', err);
       }
-    };
 
-    ws.onclose = () => {
-      setConnectionStatus('disconnected');
-    };
+      // 2. Prevent duplicate message additions
+      if (prev.some((m) => m.id === newMsg.id)) return prev;
 
-    return () => {
-      if (ws) ws.close();
-    };
-  }, [conversationId, accessToken, currentUser]);
+      // 3. Append new message to list
+      return [...prev, newMsg];
+    });
+
+    // Send read receipt if we are the recipient of this new incoming message
+    if (!isMyMessage) {
+      sendMessage({ type: 'read_receipt' });
+    }
+
+    // Notify other components (like the conversation list) to update
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('chat-message-received'));
+    }
+
+    // Scroll to bottom on new message
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
+
+  const handleTypingEvent = (senderId, username, isTyping) => {
+    if (senderId !== currentUser?.id) {
+      setIsOtherTyping(isTyping);
+      setOtherTypingUser(username);
+    }
+  };
+
+  const handleReadReceiptEvent = (readerId, username) => {
+    if (readerId !== currentUser?.id) {
+      setMessages((prev) => 
+        prev.map((m) => m.sender?.id === currentUser?.id ? { ...m, is_read: true } : m)
+      );
+    }
+  };
+
+  const handleReactionEvent = (data) => {
+    setMessages((prev) => 
+      prev.map((m) => {
+        if (m.id === data.message_id) {
+          let updatedReactions = m.reactions || [];
+          if (data.action === 'removed') {
+            updatedReactions = updatedReactions.filter(
+              (r) => !(r.username === data.username && r.emoji === data.emoji)
+            );
+          } else {
+            updatedReactions = updatedReactions.filter((r) => r.username !== data.username);
+            updatedReactions.push({
+              user_id: data.user_id,
+              username: data.username,
+              emoji: data.emoji
+            });
+          }
+          return { ...m, reactions: updatedReactions };
+        }
+        return m;
+      })
+    );
+  };
+
+  const handleReconnectEvent = () => {
+    // Refetch history from REST API to sync any missed messages
+    fetchConversationDetails(false);
+  };
+
+  // Mount clean useChatSocket hook
+  const { connectionStatus, sendMessage } = useChatSocket({
+    conversationId,
+    accessToken,
+    currentUser,
+    onMessage: handleIncomingMessage,
+    onTyping: handleTypingEvent,
+    onReadReceipt: handleReadReceiptEvent,
+    onReaction: handleReactionEvent,
+    onReconnect: handleReconnectEvent
+  });
+
+  // Intersection Observer for Read Receipts
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+
+    // Find unread messages sent by the other user
+    const unreadOthers = messages.filter((m) => m.sender?.id !== currentUser?.id && !m.is_read);
+    if (unreadOthers.length === 0) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const isVisible = entries.some((entry) => entry.isIntersecting);
+      if (isVisible) {
+        sendMessage({ type: 'read_receipt' });
+        // Disconnect immediately after marking read to save memory
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+
+    unreadOthers.forEach((m) => {
+      const el = document.getElementById(`msg-${m.id}`);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [messages, connectionStatus, currentUser, sendMessage]);
 
   // Load older messages (cursor pagination on scroll to top)
   const loadOlderMessages = async () => {
     if (!nextCursorUrl || loadingOlder) return;
     setLoadingOlder(true);
     
-    // Save scroll height to adjust scroll position after prepend
     const container = scrollContainerRef.current;
     const oldScrollHeight = container?.scrollHeight || 0;
 
     try {
-      // SWR/Axios fetch next paginated page
       const response = await api.get(nextCursorUrl);
       const olderMessages = response.data.results || [];
       
-      // Prepended list should be reversed since backend returns newest first
       setMessages((prev) => [...olderMessages.reverse(), ...prev]);
       setNextCursorUrl(response.data.next || null);
 
-      // Adjust scroll to maintain view position
       setTimeout(() => {
         if (container) {
           container.scrollTop = container.scrollHeight - oldScrollHeight;
@@ -199,20 +231,20 @@ export default function ChatWindow({ conversationId, onGoBack }) {
     }
   };
 
-  // Typing status trigger
+  // Typing status event emitter
   const handleTextInputChange = (e) => {
     setTextInput(e.target.value);
 
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (connectionStatus === 'connected') {
       if (!isTypingRef.current) {
         isTypingRef.current = true;
-        socketRef.current.send(JSON.stringify({ type: 'typing', is_typing: true }));
+        sendMessage({ type: 'typing', is_typing: true });
       }
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         isTypingRef.current = false;
-        socketRef.current.send(JSON.stringify({ type: 'typing', is_typing: false }));
+        sendMessage({ type: 'typing', is_typing: false });
       }, 2000);
     }
   };
@@ -222,25 +254,73 @@ export default function ChatWindow({ conversationId, onGoBack }) {
     e?.preventDefault();
     if (!textInput.trim() && !mediaUrl) return;
 
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        type: 'message',
-        content: textInput,
-        media_url: mediaUrl,
-        message_type: mediaUrl ? mediaType : 'text',
-        replied_to_id: replyingTo?.id || null
-      }));
+    // 1. Optimistic Message Sending: append a pending card immediately
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      content: textInput,
+      media_url: mediaUrl,
+      message_type: mediaUrl ? mediaType : 'text',
+      sender: {
+        id: currentUser?.id,
+        username: currentUser?.username,
+        profile_picture: currentUser?.profile_picture
+      },
+      created_at: new Date().toISOString(),
+      is_read: false,
+      status: 'pending', // Optimistic sending status
+      replied_to: replyingTo ? {
+        id: replyingTo.id,
+        content: replyingTo.content,
+        media_url: replyingTo.media_url,
+        message_type: replyingTo.message_type,
+        sender_username: replyingTo.sender?.username
+      } : null,
+      reactions: []
+    };
 
-      setTextInput('');
-      setMediaUrl('');
-      setReplyingTo(null);
-      setShowEmojiPicker(false);
-      
-      // Stop typing
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      isTypingRef.current = false;
-      socketRef.current.send(JSON.stringify({ type: 'typing', is_typing: false }));
+    setMessages((prev) => [...prev, optimisticMsg]);
+    
+    // Clear input accessories immediately
+    const contentToSend = textInput;
+    const mediaUrlToSend = mediaUrl;
+    const mediaTypeToSend = mediaUrl ? mediaType : 'text';
+    const repliedToIdToSend = replyingTo?.id || null;
+
+    setTextInput('');
+    setMediaUrl('');
+    setReplyingTo(null);
+    setShowEmojiPicker(false);
+
+    // Stop typing
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    isTypingRef.current = false;
+    sendMessage({ type: 'typing', is_typing: false });
+
+    // 2. Dispatch payload via WebSocket
+    const sent = sendMessage({
+      type: 'message',
+      content: contentToSend,
+      media_url: mediaUrlToSend,
+      message_type: mediaTypeToSend,
+      replied_to_id: repliedToIdToSend
+    });
+
+    // Mark as failed if socket is offline
+    if (!sent) {
+      setMessages((prev) =>
+        prev.map((m) => m.id === tempId ? { ...m, status: 'failed' } : m)
+      );
     }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('chat-message-received'));
+    }
+
+    // Scroll to bottom
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
   };
 
   // Keyboard shortcut Send on Enter
@@ -261,7 +341,6 @@ export default function ChatWindow({ conversationId, onGoBack }) {
     formData.append('file', file);
 
     try {
-      // Call REST api upload media endpoint
       const response = await api.post('/messaging/messages/upload-media/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -287,13 +366,11 @@ export default function ChatWindow({ conversationId, onGoBack }) {
 
   // Toggle emoji reactions
   const handleReactToMessage = (messageId, emoji) => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        type: 'reaction',
-        message_id: messageId,
-        emoji: emoji
-      }));
-    }
+    sendMessage({
+      type: 'reaction',
+      message_id: messageId,
+      emoji: emoji
+    });
     setActiveReactionPickerId(null);
     setActiveMenuId(null);
   };
@@ -374,7 +451,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
               {conversation?.is_group ? recipient.name : `@${recipient.name}`}
             </span>
             <span className="text-[10px] text-zinc-400 font-semibold leading-none mt-0.5">
-              {isOtherTyping ? 'typing...' : recipient.statusText}
+              {isOtherTyping ? `${otherTypingUser || 'User'} is typing...` : recipient.statusText}
             </span>
           </div>
         </div>
@@ -401,7 +478,6 @@ export default function ChatWindow({ conversationId, onGoBack }) {
 
         {Object.entries(groupedMessages).map(([dateLabel, msgs]) => (
           <div key={dateLabel} className="space-y-3.5">
-            {/* Date Separation Pill */}
             <div className="flex justify-center">
               <span className="bg-zinc-200/50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
                 {dateLabel}
@@ -418,6 +494,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
               return (
                 <div 
                   key={msg.id} 
+                  id={`msg-${msg.id}`}
                   className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} space-y-1 relative group`}
                 >
                   
@@ -440,7 +517,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
                           isOwn 
                             ? 'bg-primary text-white border-transparent rounded-tr-sm' 
                             : 'bg-white dark:bg-zinc-850 text-zinc-900 dark:text-zinc-150 border-zinc-100 dark:border-zinc-800/80 rounded-tl-sm'
-                        }`}
+                        } ${msg.status === 'pending' ? 'opacity-65' : ''} ${msg.status === 'failed' ? 'border-red-500 bg-red-50 text-red-900' : ''}`}
                       >
                         {/* Media rendering (Image/Video) */}
                         {msg.media_url && (
@@ -511,7 +588,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
                             <span>React</span>
                           </button>
 
-                          {isOwn && (
+                          {isOwn && msg.status !== 'pending' && (
                             <button
                               onClick={() => handleDeleteMessage(msg.id)}
                               className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 text-left font-bold cursor-pointer"
@@ -540,13 +617,17 @@ export default function ChatWindow({ conversationId, onGoBack }) {
                     </div>
                   </div>
 
-                  {/* Read receipts: Single check (sent) / Double check (delivered) / Blue (read) */}
+                  {/* Read receipts checkmarks */}
                   {isOwn && (
                     <div className="flex items-center space-x-1 mr-1">
-                      {msg.is_read ? (
+                      {msg.status === 'pending' ? (
+                        <span className="h-2.5 w-2.5 border border-zinc-450 border-t-transparent rounded-full animate-spin shrink-0" title="Sending..." />
+                      ) : msg.status === 'failed' ? (
+                        <span className="text-[10px] text-red-500 font-bold" title="Tap to retry">Failed</span>
+                      ) : msg.is_read ? (
                         <CheckCheck className="h-3 w-3 text-blue-500 stroke-[2.5]" title="Read" />
                       ) : (
-                        <Check className="h-3 w-3 text-zinc-450" title="Sent" />
+                        <Check className="h-3 w-3 text-zinc-405" title="Sent" />
                       )}
                     </div>
                   )}
@@ -637,7 +718,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
               <button
                 type="button"
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-1 hover:bg-zinc-150 dark:hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-zinc-600 cursor-pointer shrink-0 ml-2"
+                className="p-1 hover:bg-zinc-150 dark:hover:bg-zinc-850 rounded-full text-zinc-400 hover:text-zinc-650 cursor-pointer shrink-0 ml-2"
                 aria-label="Add Emoji"
               >
                 <Smile className="h-4.5 w-4.5" />
