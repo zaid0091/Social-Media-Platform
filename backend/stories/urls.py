@@ -4,13 +4,15 @@ from .views import (
     StoryViewView, StoryViewerListView,
     StoryHighlightCreateView, StoryHighlightUpdateView, 
     StoryHighlightDeleteView, StoryHighlightDetailView,
-    StoryArchiveView, UserHighlightListView
+    StoryArchiveView, UserHighlightListView,
+    PostReshareStoryView
 )
 
 urlpatterns = [
     # Story endpoints
     path('', StoryListView.as_view(), name='story-list'),
     path('create/', StoryCreateView.as_view(), name='story-create'),
+    path('reshare/<uuid:post_id>/', PostReshareStoryView.as_view(), name='story-reshare'),
     path('archive/', StoryArchiveView.as_view(), name='story-archive'),
     path('<uuid:story_id>/', StoryDetailView.as_view(), name='story-detail'),
     path('<uuid:story_id>/delete/', StoryDeleteView.as_view(), name='story-delete'),

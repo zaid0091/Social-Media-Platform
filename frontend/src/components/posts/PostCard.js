@@ -14,13 +14,17 @@ import {
   AlertTriangle,
   Link as LinkIcon,
   Check,
-  X
+  X,
+  Repeat2
 } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import CarouselComponent from './CarouselComponent';
 import VideoPlayer from './VideoPlayer';
 import BookmarkActionMenu from './BookmarkActionMenu';
+import RepostCard from './RepostCard';
+import QuotePostModal from './QuotePostModal';
+import ShareModal from './ShareModal';
 
 // Helper to format timestamps to relative time
 const getRelativeTime = (dateString) => {
@@ -45,10 +49,15 @@ export default function PostCard({ post, onDelete }) {
   const [isLiked, setIsLiked] = useState(post.is_liked);
   const [likeCount, setLikeCount] = useState(post.like_count || 0);
   const [isBookmarked, setIsBookmarked] = useState(post.is_bookmarked);
+  const [isReposted, setIsReposted] = useState(post.is_reposted);
+  const [repostCount, setRepostCount] = useState(post.repost_count || 0);
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isBookmarkMenuOpen, setIsBookmarkMenuOpen] = useState(false);
+  const [isRepostMenuOpen, setIsRepostMenuOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isQuoteOpen, setIsQuoteOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [animateHeart, setAnimateHeart] = useState(false);
@@ -56,15 +65,18 @@ export default function PostCard({ post, onDelete }) {
 
   const menuRef = useRef(null);
   const bookmarkRef = useRef(null);
+  const repostRef = useRef(null);
 
   // Sync state if props change
   useEffect(() => {
     setIsLiked(post.is_liked);
     setLikeCount(post.like_count || 0);
     setIsBookmarked(post.is_bookmarked);
+    setIsReposted(post.is_reposted);
+    setRepostCount(post.repost_count || 0);
   }, [post]);
 
-  // Click outside listener to auto-close options dropdown and bookmark menu
+  // Click outside listener to auto-close options dropdown, bookmark menu, and repost menu
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -72,6 +84,9 @@ export default function PostCard({ post, onDelete }) {
       }
       if (bookmarkRef.current && !bookmarkRef.current.contains(e.target)) {
         setIsBookmarkMenuOpen(false);
+      }
+      if (repostRef.current && !repostRef.current.contains(e.target)) {
+        setIsRepostMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -170,25 +185,26 @@ export default function PostCard({ post, onDelete }) {
     }
   };
 
-  const handleShare = async (e) => {
-    e.stopPropagation();
-    const postUrl = `${window.location.origin}/posts/${post.id}`;
+  const handleShare = (e) => {
+    if (e) e.stopPropagation();
+    setIsShareOpen(true);
+  };
+
+  const handleRepostToggle = async (e) => {
+    if (e) e.stopPropagation();
+    setIsRepostMenuOpen(false);
+    const wasReposted = isReposted;
     
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Post by @${post.author.username}`,
-          text: post.content,
-          url: postUrl
-        });
-      } catch (err) {}
-    } else {
-      // Fallback: Copy link to clipboard
-      try {
-        await navigator.clipboard.writeText(postUrl);
-        setToast('Link copied to clipboard!');
-        setTimeout(() => setToast(null), 2500);
-      } catch (err) {}
+    setIsReposted(!wasReposted);
+    setRepostCount((prev) => wasReposted ? Math.max(0, prev - 1) : prev + 1);
+
+    try {
+      await api.post(`/posts/${post.id}/repost/`);
+      setToast(wasReposted ? 'Repost removed' : 'Reposted successfully!');
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setIsReposted(wasReposted);
+      setRepostCount((prev) => wasReposted ? prev + 1 : Math.max(0, prev - 1));
     }
   };
 
@@ -211,6 +227,14 @@ export default function PostCard({ post, onDelete }) {
 
   return (
     <div className="bg-white dark:bg-zinc-900 border-b border-zinc-150 dark:border-zinc-800/80 w-full relative flex flex-col">
+      {/* Repost attribution header */}
+      {post.post_type === 'repost' && (
+        <div className="flex items-center space-x-1.5 px-4 pt-3 text-[10px] font-black text-zinc-400 dark:text-zinc-550 uppercase tracking-wider select-none">
+          <Repeat2 className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
+          <span>{post.author?.full_name || post.author?.username} Reposted</span>
+        </div>
+      )}
+
       {/* Toast Alert popup overlay */}
       {toast && (
         <div className="absolute top-4 right-4 z-20 px-3 py-2 bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-md">
@@ -358,6 +382,13 @@ export default function PostCard({ post, onDelete }) {
         </div>
       )}
 
+      {/* Nested original post preview for reposts/quotes */}
+      {post.repost_of && (
+        <div className="px-4 pb-3">
+          <RepostCard post={post.repost_of} />
+        </div>
+      )}
+
       {/* 4. Action Row panel */}
       <div className="px-4 py-3 flex items-center justify-between border-t border-transparent">
         <div className="flex items-center space-x-6 text-zinc-500">
@@ -386,6 +417,46 @@ export default function PostCard({ post, onDelete }) {
             <MessageCircle className="h-5 w-5" />
             <span className="text-sm font-semibold">{post.comment_count || 0}</span>
           </button>
+
+          {/* Repost button with dropdown popup */}
+          <div className="relative" ref={repostRef}>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsRepostMenuOpen(!isRepostMenuOpen);
+              }}
+              className={`flex items-center space-x-1.5 hover:text-emerald-500 transition-colors cursor-pointer select-none ${
+                isReposted ? 'text-emerald-500' : ''
+              }`}
+              aria-label="Repost options"
+            >
+              <Repeat2 className={`h-5 w-5 ${isReposted ? 'text-emerald-500 font-bold' : ''}`} />
+              <span className="text-sm font-semibold">{repostCount}</span>
+            </button>
+
+            {isRepostMenuOpen && (
+              <div className="absolute left-0 mt-1 w-32 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-25 py-1 text-xs font-bold overflow-hidden">
+                <button
+                  onClick={handleRepostToggle}
+                  className="w-full text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 text-zinc-700 dark:text-zinc-200 cursor-pointer"
+                >
+                  <Repeat2 className="h-3.5 w-3.5" />
+                  <span>{isReposted ? 'Undo Repost' : 'Repost'}</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsRepostMenuOpen(false);
+                    setIsQuoteOpen(true);
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 text-zinc-700 dark:text-zinc-200 cursor-pointer"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>Quote Post</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Share button */}
           <button 
@@ -449,6 +520,25 @@ export default function PostCard({ post, onDelete }) {
           </div>
         </div>
       )}
+
+      {/* Share Modal overlay */}
+      <ShareModal
+        isOpen={isShareOpen}
+        post={post}
+        onClose={() => setIsShareOpen(false)}
+      />
+
+      {/* Quote Post Modal overlay */}
+      <QuotePostModal
+        isOpen={isQuoteOpen}
+        post={post}
+        onClose={() => setIsQuoteOpen(false)}
+        onSuccess={(newQuote) => {
+          setRepostCount((prev) => prev + 1);
+          setToast('Quote posted successfully!');
+          setTimeout(() => setToast(null), 2500);
+        }}
+      />
     </div>
   );
 }

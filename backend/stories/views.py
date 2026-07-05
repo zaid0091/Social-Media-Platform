@@ -296,3 +296,41 @@ class UserHighlightListView(APIView):
         highlights = StoryHighlight.objects.filter(author=target_user)
         serializer = StoryHighlightSerializer(highlights, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PostReshareStoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id, *args, **kwargs):
+        from posts.models import Post
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Enforce maximum active stories limit
+        now = timezone.now()
+        active_count = Story.objects.filter(author=request.user, expires_at__gt=now, is_expired=False).count()
+        if active_count >= 30:
+            return Response({"error": "You cannot have more than 30 active stories at a time."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get first post media url
+        first_media = post.media.first()
+        if first_media:
+            media_url = first_media.media_url
+            media_type = first_media.media_type
+        else:
+            # Fallback beautiful premium color gradient preview for text-only posts
+            media_url = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500'
+            media_type = 'image'
+
+        caption = f"Reshared from @{post.author.username}"
+        story = Story.objects.create(
+            author=request.user,
+            media_url=media_url,
+            media_type=media_type,
+            caption=caption
+        )
+
+        serializer = StorySerializer(story, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

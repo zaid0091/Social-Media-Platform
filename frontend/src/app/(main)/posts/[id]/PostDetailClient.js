@@ -18,6 +18,7 @@ import CarouselComponent from '@/components/posts/CarouselComponent';
 import VideoPlayer from '@/components/posts/VideoPlayer';
 import CommentItem from '@/components/posts/CommentItem';
 import CommentInput from '@/components/posts/CommentInput';
+import RepostCard from '@/components/posts/RepostCard';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -229,17 +230,22 @@ export default function PostDetailClient({ id }) {
         
         {/* Left media block */}
         <div className="lg:col-span-7 flex items-center justify-center bg-black min-h-[40vh] lg:min-h-0 border-r border-zinc-250 dark:border-zinc-800">
-          {post.media && post.media.length > 0 ? (
-            post.media.some(m => m.media_type === 'video') ? (
-              <VideoPlayer src={post.media[0].media_url} poster={post.media[0].thumbnail_url} />
-            ) : post.media.length > 1 ? (
-              <CarouselComponent media={post.media} />
-            ) : (
-              <img src={post.media[0].media_url} alt="Attachment" className="max-w-full max-h-[80vh] object-contain" />
-            )
-          ) : (
-            <div className="p-8 text-center text-zinc-400 font-semibold italic select-none">Text post layout</div>
-          )}
+          {(() => {
+            const displayMedia = post.media && post.media.length > 0 
+              ? post.media 
+              : post.repost_of?.media;
+
+            if (displayMedia && displayMedia.length > 0) {
+              if (displayMedia.some(m => m.media_type === 'video')) {
+                return <VideoPlayer src={displayMedia[0].media_url} poster={displayMedia[0].thumbnail_url} />;
+              } else if (displayMedia.length > 1) {
+                return <CarouselComponent media={displayMedia} />;
+              } else {
+                return <img src={displayMedia[0].media_url} alt="Attachment" className="max-w-full max-h-[80vh] object-contain" />;
+              }
+            }
+            return <div className="p-8 text-center text-zinc-400 font-semibold italic select-none">Text post layout</div>;
+          })()}
         </div>
 
         {/* Right scrolling Comments & caption bar */}
@@ -277,6 +283,11 @@ export default function PostDetailClient({ id }) {
                   {post.author.username}
                 </Link>
                 <span className="text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">{post.content}</span>
+                {post.repost_of && (
+                  <div className="mt-2 w-full max-w-md">
+                    <RepostCard post={post.repost_of} />
+                  </div>
+                )}
               </div>
             </div>
 

@@ -369,39 +369,47 @@ export default function ProfilePage() {
           ) : (
             /* 3-column posts list grid */
             <div className="grid grid-cols-3 gap-1 sm:gap-4">
-              {posts.map((post) => (
-                <div 
-                  key={post.id}
-                  className="aspect-square relative bg-zinc-150 dark:bg-zinc-800 overflow-hidden group rounded-lg shadow-sm border border-zinc-200/50 dark:border-zinc-800/50 cursor-pointer"
-                  onClick={() => router.push(`/posts/${post.id}`)}
-                >
-                  {post.media_urls && post.media_urls.length > 0 ? (
-                    <img 
-                      src={post.media_urls[0]} 
-                      alt="Post Thumbnail" 
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center p-4 bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-zinc-850">
-                      <p className="text-[11px] sm:text-sm text-zinc-650 leading-relaxed font-medium line-clamp-3">
-                        {post.content}
-                      </p>
-                    </div>
-                  )}
+              {posts.map((post) => {
+                const displayMedia = post.media && post.media.length > 0 
+                  ? post.media 
+                  : post.repost_of?.media;
+                const hasMedia = displayMedia && displayMedia.length > 0;
+                const displayText = post.content || post.repost_of?.content || '';
 
-                  {/* Hover Overlay displaying statistics */}
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center space-x-4 sm:space-x-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white font-bold text-sm sm:text-base">
-                    <div className="flex items-center space-x-1.5">
-                      <Heart className="h-4 sm:h-5 sm:w-5 fill-white" />
-                      <span>{post.likes_count || 0}</span>
-                    </div>
-                    <div className="flex items-center space-x-1.5">
-                      <MessageCircle className="h-4 sm:h-5 sm:w-5 fill-white" />
-                      <span>{post.comments_count || 0}</span>
+                return (
+                  <div 
+                    key={post.id}
+                    className="aspect-square relative bg-zinc-150 dark:bg-zinc-800 overflow-hidden group rounded-lg shadow-sm border border-zinc-200/50 dark:border-zinc-800/50 cursor-pointer"
+                    onClick={() => router.push(`/posts/${post.id}`)}
+                  >
+                    {hasMedia ? (
+                      <img 
+                        src={displayMedia[0].media_url} 
+                        alt="Post Thumbnail" 
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center p-3 bg-gradient-to-br from-zinc-50 to-zinc-150 dark:from-zinc-900 dark:to-zinc-850">
+                        <p className="text-[10px] sm:text-[11px] text-zinc-600 dark:text-zinc-405 leading-normal font-semibold line-clamp-4 select-none">
+                          {displayText}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Hover Overlay displaying statistics */}
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center space-x-4 sm:space-x-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white font-bold text-sm sm:text-base">
+                      <div className="flex items-center space-x-1.5">
+                        <Heart className="h-4 sm:h-5 sm:w-5 fill-white" />
+                        <span>{post.like_count ?? post.likes_count ?? 0}</span>
+                      </div>
+                      <div className="flex items-center space-x-1.5">
+                        <MessageCircle className="h-4 sm:h-5 sm:w-5 fill-white" />
+                        <span>{post.comment_count ?? post.comments_count ?? 0}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )
         ) : (

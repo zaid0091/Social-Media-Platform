@@ -12,6 +12,24 @@ class PostMediaSerializer(serializers.ModelSerializer):
         model = PostMedia
         fields = ('id', 'media_url', 'media_type', 'order', 'thumbnail_url', 'duration')
 
+class RepostedPostSerializer(serializers.ModelSerializer):
+    author = UserFollowDetailsSerializer(read_only=True)
+    media = PostMediaSerializer(many=True, read_only=True)
+    hashtags = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = (
+            'id', 'author', 'content', 'post_type', 'privacy',
+            'media', 'hashtags', 'like_count', 'comment_count',
+            'share_count', 'bookmark_count', 'repost_count', 'view_count',
+            'created_at', 'updated_at'
+        )
+
+    def get_hashtags(self, obj):
+        return list(obj.hashtag_associations.values_list('hashtag__name', flat=True))
+
+
 class PostSerializer(serializers.ModelSerializer):
     author = UserFollowDetailsSerializer(read_only=True)
     media = PostMediaSerializer(many=True, read_only=True)
@@ -19,15 +37,17 @@ class PostSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_bookmarked = serializers.SerializerMethodField()
     is_following_author = serializers.SerializerMethodField()
+    repost_of = RepostedPostSerializer(read_only=True)
+    is_reposted = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = (
             'id', 'author', 'content', 'post_type', 'privacy',
             'media', 'hashtags', 'like_count', 'comment_count',
-            'share_count', 'bookmark_count', 'view_count',
+            'share_count', 'bookmark_count', 'repost_count', 'view_count',
             'is_liked', 'is_bookmarked', 'is_following_author',
-            'created_at', 'updated_at'
+            'repost_of', 'is_reposted', 'created_at', 'updated_at'
         )
 
     def get_hashtags(self, obj):
@@ -49,6 +69,12 @@ class PostSerializer(serializers.ModelSerializer):
         if not request or not request.user or not request.user.is_authenticated:
             return False
         return Bookmark.objects.filter(user=request.user, post=obj).exists()
+
+    def get_is_reposted(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        return Post.objects.filter(author=request.user, repost_of=obj, post_type='repost').exists()
 
     def get_is_following_author(self, obj):
         request = self.context.get('request')

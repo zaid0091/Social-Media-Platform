@@ -12,6 +12,8 @@ class Post(models.Model):
         ('image', 'Image'),
         ('video', 'Video'),
         ('mixed', 'Mixed'),
+        ('repost', 'Repost'),
+        ('quote', 'Quote Post'),
     )
     PRIVACY_CHOICES = (
         ('public', 'Public'),
@@ -25,11 +27,14 @@ class Post(models.Model):
     post_type = models.CharField(max_length=10, choices=POST_TYPE_CHOICES, default='text')
     privacy = models.CharField(max_length=10, choices=PRIVACY_CHOICES, default='public')
     
+    repost_of = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
+
     # Caches for performance optimization
     like_count = models.IntegerField(default=0)
     comment_count = models.IntegerField(default=0)
     share_count = models.IntegerField(default=0)
     bookmark_count = models.IntegerField(default=0)
+    repost_count = models.IntegerField(default=0)
     view_count = models.IntegerField(default=0)
     
     is_deleted = models.BooleanField(default=False)

@@ -716,6 +716,107 @@ class CollectionRemovePostView(APIView):
         return Response({"message": "Post removed from collection successfully."}, status=status.HTTP_200_OK)
 
 
+class RepostToggleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id, *args, **kwargs):
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=post.author) |
+            Q(blocker=post.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        repost_filter = Post.objects.filter(
+            author=request.user, 
+            repost_of=post, 
+            post_type='repost',
+            is_deleted=False
+        )
+
+        if repost_filter.exists():
+            repost_filter.update(is_deleted=True)
+            if post.repost_count > 0:
+                post.repost_count -= 1
+                post.save(update_fields=['repost_count'])
+            reposted = False
+        else:
+            Post.objects.create(
+                author=request.user,
+                repost_of=post,
+                post_type='repost',
+                privacy=post.privacy
+            )
+            post.repost_count += 1
+            post.save(update_fields=['repost_count'])
+            
+            # Send notification
+            if post.author != request.user:
+                from notifications.utils import create_notification
+                create_notification(
+                    recipient=post.author,
+                    sender=request.user,
+                    notification_type='repost',
+                    related_post=post
+                )
+            reposted = True
+
+        return Response({
+            "reposted": reposted,
+            "repost_count": post.repost_count
+        }, status=status.HTTP_200_OK)
+
+
+class QuotePostView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id, *args, **kwargs):
+        try:
+            post = Post.objects.get(id=post_id, is_deleted=False)
+        except Post.DoesNotExist:
+            return Response({"error": "Post on quote not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Block checks
+        if BlockedUser.objects.filter(
+            Q(blocker=request.user, blocked=post.author) |
+            Q(blocker=post.author, blocked=request.user)
+        ).exists():
+            return Response({"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        content = request.data.get('content', '').strip()
+        if not content:
+            return Response({"error": "Content is required for quote posts."}, status=status.HTTP_400_BAD_REQUEST)
+
+        quote = Post.objects.create(
+            author=request.user,
+            repost_of=post,
+            content=content,
+            post_type='quote',
+            privacy='public'
+        )
+
+        post.repost_count += 1
+        post.save(update_fields=['repost_count'])
+
+        # Send notification
+        if post.author != request.user:
+            from notifications.utils import create_notification
+            create_notification(
+                recipient=post.author,
+                sender=request.user,
+                notification_type='repost',
+                related_post=post
+            )
+
+        serializer = PostSerializer(quote, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
 
 
 
