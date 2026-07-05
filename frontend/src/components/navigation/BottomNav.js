@@ -15,7 +15,7 @@ export default function BottomNav() {
     { href: '/', icon: Home, label: 'Home' },
     { href: '/search', icon: Search, label: 'Search' },
     { href: '/notifications', icon: Bell, label: 'Notifications', badge: unreadCount },
-    { href: '/messaging', icon: Mail, label: 'Messages' },
+    { href: '/messages', icon: Mail, label: 'Messages' },
     { href: '/profile', icon: User, label: 'Profile' },
   ];
 

@@ -35,7 +35,7 @@ export default function LeftSidebar() {
       icon: Bell,
       badge: unreadCount
     },
-    { label: 'Messages', href: '/messaging', icon: Mail },
+    { label: 'Messages', href: '/messages', icon: Mail },
     { label: 'Bookmarks', href: '/bookmarks', icon: Bookmark },
     { label: 'Profile', href: '/profile', icon: User },
     { label: 'Settings', href: '/settings', icon: Settings },
