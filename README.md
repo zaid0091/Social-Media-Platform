@@ -84,3 +84,40 @@ Make sure you have the following installed:
    npm run dev
    ```
 4. Access the web app at `http://localhost:3000`.
+
+#### 3. Celery Setup (Background Tasks)
+Celery handles background notifications, email setups, and feed fanout activities. Ensure Redis is running, then:
+1. Navigate to the `backend/` directory and activate the virtual environment:
+   ```bash
+   cd backend
+   # Windows:
+   venv\Scripts\activate
+   # macOS/Linux:
+   source venv/bin/activate
+   ```
+2. Start the Celery worker:
+   ```bash
+   celery -A core worker --loglevel=info -P solo
+   ```
+
+---
+
+### Git & GitHub Workflow
+
+Use the following commands to commit and push modifications to your repository:
+1. Check changed files:
+   ```bash
+   git status
+   ```
+2. Stage all modifications:
+   ```bash
+   git add .
+   ```
+3. Commit with a meaningful message:
+   ```bash
+   git commit -m "Your descriptive message"
+   ```
+4. Push changes to GitHub:
+   ```bash
+   git push origin master
+   ```
