@@ -7,6 +7,7 @@ import { Search, Mail, SquarePen, Users, ArrowLeft } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import NewConversationModal from '@/components/messaging/NewConversationModal';
+import ChatWindow from '@/components/messaging/ChatWindow';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -222,30 +223,10 @@ function MessagesClient() {
         }`}
       >
         {activeConversationId ? (
-          /* Placeholder Chat view - Fully styled for next phase alignment */
-          <div className="flex-1 flex flex-col h-full bg-white dark:bg-zinc-900">
-            {/* Header */}
-            <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center px-4 justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                {/* Mobile Back Button */}
-                <button
-                  onClick={handleGoBack}
-                  className="md:hidden p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer"
-                  aria-label="Back to conversations"
-                >
-                  <ArrowLeft className="h-5 w-5 text-zinc-650 dark:text-zinc-350" />
-                </button>
-                <div className="text-left font-black text-zinc-800 dark:text-zinc-200 text-sm">
-                  Conversation Active: {activeConversationId.slice(0, 8)}...
-                </div>
-              </div>
-            </header>
-            
-            {/* Chat Body Placeholder */}
-            <div className="flex-1 flex items-center justify-center text-zinc-400 text-xs font-semibold">
-              Chat interface loading... (Will render in Phase 49)
-            </div>
-          </div>
+          <ChatWindow 
+            conversationId={activeConversationId} 
+            onGoBack={handleGoBack} 
+          />
         ) : (
           /* Desktop Empty State */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
