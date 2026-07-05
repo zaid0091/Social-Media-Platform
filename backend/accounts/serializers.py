@@ -10,7 +10,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'username', 'email', 'full_name', 'bio', 
             'profile_picture', 'cover_photo', 'website', 
-            'location', 'date_of_birth', 'phone_number', 
+            'location', 'date_of_birth', 'phone_number', 'gender', 
             'is_verified', 'is_private', 'account_type', 
             'follower_count', 'following_count', 'post_count',
             'created_at'
@@ -68,7 +68,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'username', 'full_name', 'bio', 'website', 'location', 
+            'username', 'email', 'full_name', 'bio', 'website', 'location', 
             'date_of_birth', 'gender', 'phone_number', 'is_private', 'account_type',
             'profile_picture', 'cover_photo'
         )
@@ -82,6 +82,13 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Username must be between 3 and 30 characters.")
         if not re.match(r"^[a-zA-Z0-9_]+$", value):
             raise serializers.ValidationError("Only letters, numbers, and underscores are allowed.")
+        return value
+
+    def validate_email(self, value):
+        user = self.instance
+        value = value.lower()
+        if User.objects.filter(email__iexact=value).exclude(id=user.id).exists():
+            raise serializers.ValidationError("A user with that email already exists.")
         return value
 
 class ChangePasswordSerializer(serializers.Serializer):

@@ -184,14 +184,26 @@ export default function EditProfilePage() {
 
     // Append files if dropped
     if (profilePicFile) {
-      formData.append('profile_picture', profilePicFile);
+      if (profilePicFile.path && !(profilePicFile instanceof File)) {
+        formData.append('profile_picture', profilePicFile.path);
+      } else {
+        formData.append('profile_picture', profilePicFile);
+      }
     }
     if (coverPhotoFile) {
-      formData.append('cover_photo', coverPhotoFile);
+      if (coverPhotoFile.path && !(coverPhotoFile instanceof File)) {
+        formData.append('cover_photo', coverPhotoFile.path);
+      } else {
+        formData.append('cover_photo', coverPhotoFile);
+      }
     }
 
     try {
-      const response = await api.patch('/users/profile/', formData);
+      const response = await api.patch('/users/profile/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       updateUser(response.data);
       setIsDirty(false);
       

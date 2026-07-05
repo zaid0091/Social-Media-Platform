@@ -256,7 +256,42 @@ class UserProfileView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request, *args, **kwargs):
-        serializer = UserUpdateSerializer(request.user, data=request.data, partial=True)
+        from django.core.files.uploadedfile import UploadedFile
+        
+        # Make a mutable copy of request.data if possible
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        
+        # Resolve mock files or preview strings from disk if they exist
+        for img_field in ['profile_picture', 'cover_photo']:
+            if img_field in data and not isinstance(data[img_field], UploadedFile):
+                val = data[img_field]
+                if isinstance(val, str) and val.strip() and not val.startswith('http'):
+                    import os
+                    from django.core.files import File
+                    clean_path = val.lstrip('./').replace('/', os.sep).replace('\\', os.sep)
+                    # Try possible paths in workspace
+                    possible_paths = [
+                        os.path.join(settings.BASE_DIR, clean_path),
+                        os.path.join(os.path.dirname(settings.BASE_DIR), clean_path),
+                        os.path.join(os.path.dirname(settings.BASE_DIR), 'frontend', clean_path),
+                        clean_path
+                    ]
+                    file_opened = False
+                    for p in possible_paths:
+                        if os.path.exists(p) and os.path.isfile(p):
+                            try:
+                                f = open(p, 'rb')
+                                data[img_field] = File(f, name=os.path.basename(p))
+                                file_opened = True
+                                break
+                            except Exception:
+                                pass
+                    if not file_opened:
+                        data.pop(img_field)
+                else:
+                    data.pop(img_field)
+
+        serializer = UserUpdateSerializer(request.user, data=data, partial=True)
 
         if serializer.is_valid():
             serializer.save()
