@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
 import api from '@/services/api';
-import useAuthStore from '@/store/useAuthStore';
+import useNotificationStore from '@/store/useNotificationStore';
 import Logo from './Logo';
 import UserDropdown from './UserDropdown';
 import NewPostButton from './NewPostButton';
@@ -23,7 +23,7 @@ const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function LeftSidebar() {
   const pathname = usePathname();
-  const unreadCount = useAuthStore((state) => state.unreadNotificationCount);
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
 
   const navItems = [
     { label: 'Home', href: '/', icon: Home },
@@ -73,7 +73,8 @@ export default function LeftSidebar() {
                   {/* Notifications Unread Count Badge */}
                   {item.badge > 0 && (
                     <span 
-                      className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 animate-pulse"
+                      key={item.badge}
+                      className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 animate-badge-pop"
                       aria-label={`${item.badge} unread notifications`}
                     >
                       {item.badge > 99 ? '99+' : item.badge}

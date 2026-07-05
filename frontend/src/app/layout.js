@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import AuthInitializer from "@/components/AuthInitializer";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,6 +34,7 @@ export default function RootLayout({ children }) {
       <body className="min-h-full flex flex-col bg-light-bg text-foreground dark:bg-dark-bg transition-colors duration-200">
         <AuthInitializer>
           {children}
+          <Toaster position="bottom-right" theme="dark" closeButton />
         </AuthInitializer>
       </body>
     </html>

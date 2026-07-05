@@ -2,57 +2,42 @@
 
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
-import { Bell, CheckSquare, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Bell, CheckSquare } from 'lucide-react';
 import api from '@/services/api';
-import useAuthStore from '@/store/useAuthStore';
+import useNotificationStore from '@/store/useNotificationStore';
 import NotificationItem from '@/components/notifications/NotificationItem';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function NotificationsPage() {
-  const { unreadNotificationCount, setUnreadNotificationCount } = useAuthStore();
+  const { 
+    notifications, 
+    unreadCount, 
+    setNotifications, 
+    markRead, 
+    markAllRead 
+  } = useNotificationStore();
+  
   const [page, setPage] = useState(1);
 
-  // Fetch paginated notifications list (poll every 20s or revalidate on focus)
-  const { data, error, mutate, isLoading } = useSWR(
+  // Fetch paginated notifications list from REST API
+  const { data, error, isLoading } = useSWR(
     `/notifications/?page=${page}`,
     fetcher,
     { refreshInterval: 20000 }
   );
 
-  // Prepend new incoming notifications from WebSocket in real-time
+  // Synchronize REST fetched notifications to Zustand store
   useEffect(() => {
-    const handleNewNotification = (e) => {
-      const newNotif = e.detail;
-      if (!newNotif) return;
-      
-      mutate((currentData) => {
-        if (!currentData) {
-          return { count: 1, next: null, previous: null, results: [newNotif] };
-        }
-        // Avoid duplicate additions if SWR refetches in between
-        if (currentData.results?.some((n) => n.id === newNotif.id)) {
-          return currentData;
-        }
-        return {
-          ...currentData,
-          count: (currentData.count || 0) + 1,
-          results: [newNotif, ...(currentData.results || [])]
-        };
-      }, false);
-    };
+    if (data?.results) {
+      setNotifications(data.results);
+    }
+  }, [data, setNotifications]);
 
-    window.addEventListener('new-notification-received', handleNewNotification);
-    return () => {
-      window.removeEventListener('new-notification-received', handleNewNotification);
-    };
-  }, [mutate]);
-
-  const notifications = data?.results || [];
   const hasNext = !!data?.next;
   const hasPrev = !!data?.previous;
 
-  // Group notifications into time buckets
+  // Group notifications into Today, This Week, and Earlier buckets
   const getGroupedNotifications = () => {
     const today = [];
     const thisWeek = [];
@@ -81,35 +66,17 @@ export default function NotificationsPage() {
   const handleMarkRead = async (notificationId) => {
     try {
       await api.post(`/notifications/${notificationId}/read/`);
-      // Update local SWR cache immediately
-      mutate(
-        {
-          ...data,
-          results: notifications.map((n) =>
-            n.id === notificationId ? { ...n, is_read: true } : n
-          ),
-        },
-        false
-      );
-      // Decrement the global unread count
-      setUnreadNotificationCount(Math.max(0, unreadNotificationCount - 1));
+      markRead(notificationId);
     } catch (err) {
       console.error('Failed to mark read', err);
     }
   };
 
   const handleMarkAllRead = async () => {
-    if (unreadNotificationCount === 0) return;
+    if (unreadCount === 0) return;
     try {
       await api.post('/notifications/mark-all-read/');
-      mutate(
-        {
-          ...data,
-          results: notifications.map((n) => ({ ...n, is_read: true })),
-        },
-        false
-      );
-      setUnreadNotificationCount(0);
+      markAllRead();
     } catch (err) {
       console.error('Failed to mark all read', err);
     }
@@ -129,7 +96,7 @@ export default function NotificationsPage() {
           </h1>
         </div>
         
-        {unreadNotificationCount > 0 && (
+        {unreadCount > 0 && (
           <button
             onClick={handleMarkAllRead}
             className="flex items-center space-x-1.5 px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-250 border border-zinc-250/20 dark:border-zinc-850 rounded-xl text-xs font-black select-none cursor-pointer transition"

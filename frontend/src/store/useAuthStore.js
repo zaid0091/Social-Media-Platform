@@ -7,14 +7,10 @@ const useAuthStore = create((set, get) => ({
   accessToken: null,
   isAuthenticated: false,
   isLoading: true,
-  unreadNotificationCount: 0,
 
   setLoading: (isLoading) => set({ isLoading }),
   
   setAccessToken: (accessToken) => set({ accessToken }),
-
-  setUnreadNotificationCount: (count) => set({ unreadNotificationCount: count }),
-  incrementUnreadNotificationCount: () => set((state) => ({ unreadNotificationCount: state.unreadNotificationCount + 1 })),
 
   updateUser: (userData) => set((state) => ({
     user: state.user ? { ...state.user, ...userData } : userData
@@ -53,8 +49,7 @@ const useAuthStore = create((set, get) => ({
       user: null,
       accessToken: null,
       isAuthenticated: false,
-      isLoading: false,
-      unreadNotificationCount: 0
+      isLoading: false
     });
   },
 

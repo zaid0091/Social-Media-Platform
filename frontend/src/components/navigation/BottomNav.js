@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import useAuthStore from '@/store/useAuthStore';
+import useNotificationStore from '@/store/useNotificationStore';
 import { Home, Search, Bell, Mail, User } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const unreadCount = useAuthStore((state) => state.unreadNotificationCount);
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
 
   const navItems = [
     { href: '/', icon: Home, label: 'Home' },
@@ -43,7 +43,8 @@ export default function BottomNav() {
               {/* Badge */}
               {item.badge > 0 && (
                 <span 
-                  className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 animate-pulse"
+                  key={item.badge}
+                  className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 animate-badge-pop"
                   aria-label={`${item.badge} unread notifications`}
                 >
                   {item.badge > 99 ? '99+' : item.badge}
