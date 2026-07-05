@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import useSWR from 'swr';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import FollowButton from '@/components/profile/FollowButton';
 import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
 import HighlightEditModal from '@/components/stories/HighlightEditModal';
 import StoryViewer from '@/components/stories/StoryViewer';
@@ -79,46 +81,7 @@ export default function ProfilePage() {
     fetcher
   );
 
-  // 3. Follow/Unfollow handler with optimistic SWR mutations
-  const handleFollowToggle = async () => {
-    if (!profile) return;
 
-    const wasFollowing = profile.is_following;
-    const isPrivate = profile.is_private;
-    const isPending = profile.follow_request_pending;
-
-    // Construct optimistic layout state updates
-    let updatedProfile = { ...profile };
-    if (wasFollowing) {
-      updatedProfile.is_following = false;
-      updatedProfile.follower_count = Math.max(0, updatedProfile.follower_count - 1);
-    } else if (isPending) {
-      updatedProfile.follow_request_pending = false;
-    } else {
-      if (isPrivate) {
-        updatedProfile.follow_request_pending = true;
-      } else {
-        updatedProfile.is_following = true;
-        updatedProfile.follower_count += 1;
-      }
-    }
-
-    // Apply immediate optimistic state update to cache
-    mutateProfile(updatedProfile, { revalidate: false });
-
-    try {
-      if (wasFollowing || isPending) {
-        await api.post(`/users/unfollow/${profile.id}/`);
-      } else {
-        await api.post(`/users/follow/${profile.id}/`);
-      }
-      // Revalidate to ensure server and client count align
-      mutateProfile();
-    } catch (err) {
-      // Revert cache to initial state if API throws
-      mutateProfile(profile);
-    }
-  };
 
   if (profileError) {
     return (
@@ -203,22 +166,24 @@ export default function ProfilePage() {
                   <MessageSquare className="h-5 w-5" />
                 </button>
 
-                <button
-                  onClick={handleFollowToggle}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer select-none ${
-                    profile.is_following
-                      ? 'bg-zinc-155 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700/80 text-zinc-900 dark:text-zinc-50'
-                      : profile.follow_request_pending
-                      ? 'bg-zinc-100 dark:bg-zinc-850 text-zinc-550 cursor-default'
-                      : 'bg-primary hover:bg-primary-hover text-white'
-                  }`}
-                >
-                  {profile.is_following 
-                    ? 'Following' 
-                    : profile.follow_request_pending 
-                    ? 'Requested' 
-                    : 'Follow'}
-                </button>
+                <FollowButton
+                  userId={profile.id}
+                  username={profile.username}
+                  initialIsFollowing={profile.is_following}
+                  initialFollowRequestPending={profile.follow_request_pending}
+                  isPrivate={profile.is_private}
+                  onStateChange={(newFollowing, newPending) => {
+                    mutateProfile({
+                      ...profile,
+                      is_following: newFollowing,
+                      follow_request_pending: newPending,
+                      follower_count: newFollowing 
+                        ? (profile.is_following ? profile.follower_count : profile.follower_count + 1)
+                        : (profile.is_following ? Math.max(0, profile.follower_count - 1) : profile.follower_count)
+                    }, { revalidate: true });
+                  }}
+                  className="!px-4 !py-2 text-sm"
+                />
               </>
             )}
           </div>
@@ -257,14 +222,30 @@ export default function ProfilePage() {
 
         {/* Follower / Following counter statistics */}
         <div className="flex space-x-6 pt-2">
-          <div className="flex items-center space-x-1 text-[15px]">
-            <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.following_count || 0}</span>
-            <span className="text-zinc-500 font-medium">Following</span>
-          </div>
-          <div className="flex items-center space-x-1 text-[15px]">
-            <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.follower_count || 0}</span>
-            <span className="text-zinc-500 font-medium">Followers</span>
-          </div>
+          {profile.is_accessible ? (
+            <Link href={`/${profile.username}/following`} className="flex items-center space-x-1 text-[15px] hover:underline cursor-pointer">
+              <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.following_count || 0}</span>
+              <span className="text-zinc-500 font-medium">Following</span>
+            </Link>
+          ) : (
+            <div className="flex items-center space-x-1 text-[15px]">
+              <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.following_count || 0}</span>
+              <span className="text-zinc-500 font-medium">Following</span>
+            </div>
+          )}
+
+          {profile.is_accessible ? (
+            <Link href={`/${profile.username}/followers`} className="flex items-center space-x-1 text-[15px] hover:underline cursor-pointer">
+              <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.follower_count || 0}</span>
+              <span className="text-zinc-500 font-medium">Followers</span>
+            </Link>
+          ) : (
+            <div className="flex items-center space-x-1 text-[15px]">
+              <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.follower_count || 0}</span>
+              <span className="text-zinc-500 font-medium">Followers</span>
+            </div>
+          )}
+
           <div className="flex items-center space-x-1 text-[15px]">
             <span className="font-extrabold text-zinc-900 dark:text-zinc-50">{profile.post_count || 0}</span>
             <span className="text-zinc-500 font-medium">Posts</span>

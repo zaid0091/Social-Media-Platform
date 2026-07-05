@@ -1,6 +1,8 @@
+from accounts import models
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.core.mail import send_mail
+from django.db import models
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.urls import reverse
 from rest_framework import status
@@ -361,17 +363,66 @@ class UserSuggestionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        # Exclude self and already followed users
-        followed_ids = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
-        suggestions = User.objects.filter(
+        user = request.user
+        
+        # Get list of user IDs we already follow
+        following_ids = list(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+        
+        # Exclude self and already followed
+        exclude_ids = set(following_ids + [user.id])
+        
+        # 1. Friends of Friends (mutual followers)
+        fof_relations = Follow.objects.filter(
+            follower_id__in=following_ids
+        ).exclude(
+            following_id__in=exclude_ids
+        ).values('following_id').annotate(
+            mutual_count=models.Count('follower_id')
+        ).order_by('-mutual_count')
+        
+        suggested_ids = [item['following_id'] for item in fof_relations]
+        
+        # 2. Similar interest fallback (users with same account_type or general popular creators)
+        same_interest_users = User.objects.filter(
+            is_active=True,
+            account_type=user.account_type
+        ).exclude(
+            id__in=exclude_ids
+        ).exclude(
+            id__in=suggested_ids
+        ).order_by('-follower_count')
+        
+        suggested_ids += list(same_interest_users.values_list('id', flat=True))
+        
+        # 3. Popular accounts fallback
+        popular_users = User.objects.filter(
             is_active=True
         ).exclude(
-            id=request.user.id
+            id__in=exclude_ids
         ).exclude(
-            id__in=followed_ids
-        ).order_by('-is_verified', '-follower_count')[:5]
-
-        serializer = UserSerializer(suggestions, many=True)
+            id__in=suggested_ids
+        ).order_by('-is_verified', '-follower_count')
+        
+        suggested_ids += list(popular_users.values_list('id', flat=True))
+        
+        # Keep unique values while preserving order
+        seen = set()
+        final_ids = []
+        for uid in suggested_ids:
+            if uid not in seen:
+                seen.add(uid)
+                final_ids.append(uid)
+                if len(final_ids) >= 15:
+                    break
+        
+        # Preserve order when querying the Database
+        if final_ids:
+            clauses = [models.When(id=uid, then=pos) for pos, uid in enumerate(final_ids)]
+            suggestions = User.objects.filter(id__in=final_ids).order_by(models.Case(*clauses))
+        else:
+            suggestions = User.objects.none()
+            
+        serializer = UserSerializer(suggestions, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

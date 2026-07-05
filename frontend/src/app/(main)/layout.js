@@ -11,30 +11,19 @@ import LeftSidebar from '@/components/navigation/LeftSidebar';
 import BottomNav from '@/components/navigation/BottomNav';
 import CreatePostFAB from '@/components/navigation/CreatePostFAB';
 import PostCreateModal from '@/components/posts/PostCreateModal';
+import SuggestedUsersWidget from '@/components/profile/SuggestedUsersWidget';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function MainLayout({ children }) {
-  const { isAuthenticated, isLoading, refreshSession } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const router = useRouter();
 
-  // SWR queries for Right Sidebar
-  const { data: suggestions, mutate: mutateSuggestions } = useSWR(
-    isAuthenticated ? '/users/suggestions/' : null,
-    fetcher
-  );
+  // SWR queries for Right Sidebar (Trending hashtags only, suggestions moved to widget)
   const { data: trending } = useSWR(
     isAuthenticated ? '/hashtags/trending/' : null,
     fetcher
   );
-
-  const handleFollowSuggestion = async (userId) => {
-    try {
-      await api.post(`/users/follow/${userId}/`);
-      // Update suggestions list
-      mutateSuggestions();
-    } catch (err) {}
-  };
 
 
 
@@ -78,42 +67,7 @@ export default function MainLayout({ children }) {
           </div>
 
           {/* Suggestions Widget */}
-          <div className="p-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4">
-            <h3 className="font-bold text-base px-2">Who to follow</h3>
-            <div className="flex flex-col space-y-3">
-              {suggestions && suggestions.length > 0 ? (
-                suggestions.slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between px-2">
-                    <Link href={`/${item.username}`} className="flex items-center space-x-3 min-w-0 group">
-                      {item.profile_picture ? (
-                        <img 
-                          src={item.profile_picture} 
-                          alt={item.username} 
-                          className="h-8 w-8 rounded-full object-cover border border-zinc-200/50 dark:border-zinc-800/50"
-                        />
-                      ) : (
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0">
-                          {item.username?.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-bold truncate leading-tight group-hover:underline">{item.full_name || item.username}</span>
-                        <span className="text-xs text-zinc-500 truncate">@{item.username}</span>
-                      </div>
-                    </Link>
-                    <button 
-                      onClick={() => handleFollowSuggestion(item.id)}
-                      className="px-3 py-1 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-950 rounded-full text-xs font-bold hover:opacity-90 transition-opacity shrink-0 cursor-pointer select-none"
-                    >
-                      Follow
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-zinc-500 px-2">No follow suggestions available</p>
-              )}
-            </div>
-          </div>
+          <SuggestedUsersWidget />
 
           {/* Trending Widget */}
           <div className="p-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4">

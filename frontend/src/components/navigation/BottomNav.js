@@ -2,19 +2,37 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import useSWR from 'swr';
+import api from '@/services/api';
+import useAuthStore from '@/store/useAuthStore';
 import useNotificationStore from '@/store/useNotificationStore';
-import { Home, Search, Bell, Mail, User } from 'lucide-react';
+import { Home, Search, Bell, Mail, User, UserPlus } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function BottomNav() {
   const pathname = usePathname();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
+  const { user: currentUser } = useAuthStore();
+
+  const { data: requestsData } = useSWR(
+    currentUser?.is_private ? '/users/follow-requests/' : null,
+    fetcher,
+    { refreshInterval: 20000 }
+  );
+
+  const pendingRequestsCount = requestsData?.count || 0;
 
   const navItems = [
     { href: '/', icon: Home, label: 'Home' },
     { href: '/search', icon: Search, label: 'Search' },
     { href: '/notifications', icon: Bell, label: 'Notifications', badge: unreadCount },
+    ...(currentUser?.is_private ? [{
+      href: '/follow-requests',
+      icon: UserPlus,
+      label: 'Requests',
+      badge: pendingRequestsCount
+    }] : []),
     { href: '/messages', icon: Mail, label: 'Messages' },
     { href: '/profile', icon: User, label: 'Profile' },
   ];

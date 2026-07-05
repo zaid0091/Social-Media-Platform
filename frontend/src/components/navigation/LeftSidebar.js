@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
 import api from '@/services/api';
 import useNotificationStore from '@/store/useNotificationStore';
+import useAuthStore from '@/store/useAuthStore';
 import Logo from './Logo';
 import UserDropdown from './UserDropdown';
 import NewPostButton from './NewPostButton';
@@ -16,7 +17,8 @@ import {
   Mail, 
   Bookmark, 
   User, 
-  Settings 
+  Settings,
+  UserPlus
 } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
@@ -24,6 +26,16 @@ const fetcher = (url) => api.get(url).then((res) => res.data);
 export default function LeftSidebar() {
   const pathname = usePathname();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
+  const { user: currentUser } = useAuthStore();
+
+  // Query pending follow requests only if user is private
+  const { data: requestsData } = useSWR(
+    currentUser?.is_private ? '/users/follow-requests/' : null,
+    fetcher,
+    { refreshInterval: 20000 } // Refresh every 20s
+  );
+
+  const pendingRequestsCount = requestsData?.count || 0;
 
   const navItems = [
     { label: 'Home', href: '/', icon: Home },
@@ -35,6 +47,12 @@ export default function LeftSidebar() {
       icon: Bell,
       badge: unreadCount
     },
+    ...(currentUser?.is_private ? [{
+      label: 'Requests',
+      href: '/follow-requests',
+      icon: UserPlus,
+      badge: pendingRequestsCount
+    }] : []),
     { label: 'Messages', href: '/messages', icon: Mail },
     { label: 'Bookmarks', href: '/bookmarks', icon: Bookmark },
     { label: 'Profile', href: '/profile', icon: User },

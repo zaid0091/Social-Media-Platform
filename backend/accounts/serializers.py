@@ -124,10 +124,15 @@ class ProfilePictureUploadSerializer(serializers.ModelSerializer):
 class UserFollowDetailsSerializer(serializers.ModelSerializer):
     is_online = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    follow_request_pending = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'full_name', 'profile_picture', 'is_verified', 'is_online', 'last_seen', 'is_following')
+        fields = (
+            'id', 'username', 'full_name', 'profile_picture', 'is_verified', 
+            'is_online', 'last_seen', 'is_following', 'is_private', 
+            'follow_request_pending', 'follower_count'
+        )
 
     def get_is_online(self, obj):
         from django_redis import get_redis_connection
@@ -142,6 +147,13 @@ class UserFollowDetailsSerializer(serializers.ModelSerializer):
         if request and request.user and request.user.is_authenticated:
             from .models import Follow
             return Follow.objects.filter(follower=request.user, following=obj).exists()
+        return False
+
+    def get_follow_request_pending(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            from .models import FollowRequest
+            return FollowRequest.objects.filter(requester=request.user, receiver=obj, status='pending').exists()
         return False
 
 from .models import Follow, FollowRequest, BlockedUser
