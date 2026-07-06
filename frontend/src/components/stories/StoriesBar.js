@@ -31,10 +31,11 @@ export default function StoriesBar() {
     return group.stories.some((story) => !story.is_viewed_by_me);
   };
 
-  const ownGroupIndex = storyGroups.findIndex(g => g.author.id === currentUser?.id);
+  const ownGroupIndex = storyGroups.findIndex(g => g.author.username === currentUser?.username);
   const hasOwnStories = ownGroupIndex !== -1;
   const ownGroup = hasOwnStories ? storyGroups[ownGroupIndex] : null;
   const ownStoriesUnviewed = ownGroup ? hasUnviewedStories(ownGroup) : false;
+
 
   return (
     <div className="w-full border-b border-zinc-150 dark:border-zinc-800/80 bg-zinc-50/20 dark:bg-zinc-900/20 py-4 px-4 overflow-hidden relative select-none">
@@ -55,7 +56,7 @@ export default function StoriesBar() {
                 hasOwnStories 
                   ? ownStoriesUnviewed 
                     ? 'bg-gradient-to-tr from-yellow-400 to-fuchsia-600 p-[2.5px]' 
-                    : 'border border-zinc-250 dark:border-zinc-800 p-[2px]'
+                    : 'border border-zinc-300 dark:border-zinc-800 p-[2px]'
                   : 'border-2 border-dashed border-zinc-300 dark:border-zinc-800 p-[2px]'
               }`}
             >
@@ -90,9 +91,9 @@ export default function StoriesBar() {
         </div>
 
         {/* 2. Grouped Followed profiles story circles */}
-        {storyGroups.filter(g => g.author.id !== currentUser?.id).map((group) => {
+        {storyGroups.filter(g => g.author.username !== currentUser?.username).map((group) => {
           // Re-map index because we filtered out own story group
-          const actualIndex = storyGroups.findIndex(g => g.author.id === group.author.id);
+          const actualIndex = storyGroups.findIndex(g => g.author.username === group.author.username);
           const unviewed = hasUnviewedStories(group);
           return (
             <div key={group.author.id} className="flex flex-col items-center space-y-1.5 shrink-0">
@@ -101,7 +102,7 @@ export default function StoriesBar() {
                 className={`h-14 w-14 rounded-full flex items-center justify-center cursor-pointer transform hover:scale-105 transition-all ${
                   unviewed 
                     ? 'bg-gradient-to-tr from-yellow-400 to-fuchsia-600 p-[2.5px]' 
-                    : 'border border-zinc-250 dark:border-zinc-800 p-[2px]'
+                    : 'border border-zinc-300 dark:border-zinc-800 p-[2px]'
                 }`}
               >
                 <div className="h-full w-full rounded-full border-2 border-white dark:border-zinc-900 overflow-hidden bg-zinc-100 dark:bg-zinc-800">
