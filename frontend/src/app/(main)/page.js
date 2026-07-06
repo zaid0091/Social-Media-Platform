@@ -33,7 +33,12 @@ export default function HomeFeedPage() {
       const res = await api.get(`/posts/feed/?page=${pageNumber}`);
       const results = res.data.results || [];
       
-      setPosts((prev) => isRefresh ? results : [...prev, ...results]);
+      setPosts((prev) => {
+        if (isRefresh) return results;
+        const existingIds = new Set(prev.map(p => p.id));
+        const uniqueNewResults = results.filter(p => !existingIds.has(p.id));
+        return [...prev, ...uniqueNewResults];
+      });
       setHasNextPage(!!res.data.next);
     } catch (err) {
       setError('Failed to load posts feed. Please check your connection.');
