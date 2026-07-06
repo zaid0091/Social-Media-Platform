@@ -763,6 +763,61 @@ class NewsFeedAPITests(TestCase):
         self.assertEqual(res.data["results"][0]["id"], str(self.post_followers.id))
 
 
+class MentionsListViewAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="target_user",
+            email="target@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.other_user = User.objects.create_user(
+            username="other_user",
+            email="other@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_mentions_list_returns_correct_posts_and_comments(self):
+        # Create a post from other_user mentioning target_user
+        post_mention = Post.objects.create(
+            author=self.other_user,
+            content="Hello @target_user, check this out!",
+            privacy="public",
+            post_type="text"
+        )
+        
+        # Create a post NOT mentioning target_user
+        Post.objects.create(
+            author=self.other_user,
+            content="Hello @other_user!",
+            privacy="public",
+            post_type="text"
+        )
+
+        # Create a comment mentioning target_user
+        post_for_comment = Post.objects.create(
+            author=self.other_user,
+            content="Base post",
+            privacy="public",
+            post_type="text"
+        )
+        comment_mention = Comment.objects.create(
+            post=post_for_comment,
+            author=self.other_user,
+            content="Hey @target_user nice comment"
+        )
+
+        res = self.client.get("/api/v1/posts/mentions/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["posts"]), 1)
+        self.assertEqual(res.data["posts"][0]["id"], str(post_mention.id))
+        self.assertEqual(len(res.data["comments"]), 1)
+        self.assertEqual(res.data["comments"][0]["id"], str(comment_mention.id))
+
+
 from django.test import TransactionTestCase, override_settings
 from channels.testing import WebsocketCommunicator
 from core.asgi import application

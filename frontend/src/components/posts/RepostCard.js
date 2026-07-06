@@ -2,30 +2,12 @@
 
 import Link from 'next/link';
 import { Film } from 'lucide-react';
+import { parseContent } from '@/utils/parseContent';
 
 export default function RepostCard({ post }) {
   if (!post) return null;
 
-  const parseContent = (text) => {
-    if (!text) return '';
-    const parts = text.split(/([#@][a-zA-Z0-9_]+)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('#')) {
-        return (
-          <span key={index} className="text-primary font-bold">
-            {part}
-          </span>
-        );
-      } else if (part.startsWith('@')) {
-        return (
-          <span key={index} className="text-primary font-bold">
-            {part}
-          </span>
-        );
-      }
-      return part;
-    });
-  };
+
 
   const hasVideo = post.media?.some((m) => m.media_type === 'video');
   const hasImage = post.media?.length > 0 && !hasVideo;

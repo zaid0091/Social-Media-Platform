@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Smile, X, Send } from 'lucide-react';
+import MentionDropdown from './MentionDropdown';
 
 export default function CommentInput({
   user,
@@ -16,14 +17,40 @@ export default function CommentInput({
   const emojiRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // Mention suggestions states
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionPosition, setMentionPosition] = useState(0);
+
   // Auto-expand textarea height on input change
   const handleInputChange = (e) => {
-    const textarea = e.target;
-    setCommentText(textarea.value);
+    const val = e.target.value;
+    setCommentText(val);
     
     // Auto-resize height
+    const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
+
+    // Mention trigger check
+    const cursor = textarea.selectionStart;
+    const textBeforeCursor = val.slice(0, cursor);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex !== -1 && lastAtIndex >= textBeforeCursor.lastIndexOf(' ')) {
+      const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : '';
+      if (charBeforeAt === '' || /\s/.test(charBeforeAt)) {
+        const queryText = textBeforeCursor.slice(lastAtIndex + 1);
+        if (!queryText.includes(' ')) {
+          setMentionQuery(queryText);
+          setMentionPosition(lastAtIndex);
+          setShowMentionDropdown(true);
+          return;
+        }
+      }
+    }
+    setShowMentionDropdown(false);
+    setMentionQuery('');
   };
 
   // Close emoji picker on click outside
@@ -62,12 +89,39 @@ export default function CommentInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+    setShowMentionDropdown(false);
+    setMentionQuery('');
   };
 
   const emojis = ['😃', '😂', '🤣', '😊', '😍', '🥰', '😘', '😜', '🤔', '👍', '👎', '🔥', '👏', '🎉', '❤️', '💔'];
 
   return (
     <div className="border-t border-zinc-150 dark:border-zinc-800 p-4 relative bg-white dark:bg-zinc-900 shrink-0 select-none">
+      {/* Autocomplete mention dropdown absolute overlay */}
+      {showMentionDropdown && (
+        <MentionDropdown
+          query={mentionQuery}
+          onSelect={(username) => {
+            const textBeforeAt = commentText.slice(0, mentionPosition);
+            const textAfterCursor = textareaRef.current ? commentText.slice(textareaRef.current.selectionStart) : '';
+            const newContent = `${textBeforeAt}@${username} ${textAfterCursor}`;
+            setCommentText(newContent);
+            setShowMentionDropdown(false);
+            setMentionQuery('');
+            setTimeout(() => {
+              if (textareaRef.current) {
+                textareaRef.current.focus();
+              }
+            }, 50);
+          }}
+          onClose={() => {
+            setShowMentionDropdown(false);
+            setMentionQuery('');
+          }}
+          className="bottom-[72px] left-4 right-4"
+        />
+      )}
+
       {/* 1. Reply Target Header Banner */}
       {replyTarget && (
         <div className="flex items-center justify-between px-3 py-1.5 bg-primary/5 rounded-lg mb-2 text-xs text-primary font-semibold">

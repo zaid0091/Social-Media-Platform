@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import api from '@/services/api';
 import useUIStore from '@/store/useUIStore';
+import MentionDropdown from './MentionDropdown';
 
 // Helper to center the initial crop
 function centerAspectCrop(mediaWidth, mediaHeight, aspect) {
@@ -60,6 +61,11 @@ export default function PostCreateModal() {
   const [hashtagSuggestions, setHashtagSuggestions] = useState([]);
   const [showHashtagDropdown, setShowHashtagDropdown] = useState(false);
   const [hashtagPosition, setHashtagPosition] = useState(0);
+
+  // Mention suggestions states
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionPosition, setMentionPosition] = useState(0);
 
   // Upload/Progress states
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -223,29 +229,53 @@ export default function PostCreateModal() {
     }, 'image/jpeg');
   };
 
-  // Text details content watcher for hashtags suggestions
+  // Text details content watcher for hashtags suggestions and mentions
   const handleContentChange = (e) => {
     const val = e.target.value;
     if (val.length > 2200) return;
     setContent(val);
 
-    // Hashtag suggestion trigger check
     const cursor = e.target.selectionStart;
     const textBeforeCursor = val.slice(0, cursor);
-    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
 
-    if (lastHashIndex !== -1) {
-      const queryText = textBeforeCursor.slice(lastHashIndex + 1);
-      // Ensure there are no spaces between hash and cursor
-      if (!queryText.includes(' ')) {
-        setHashtagQuery(queryText);
-        setHashtagPosition(lastHashIndex);
-        setShowHashtagDropdown(true);
-        return;
+    // Hashtag suggestion trigger check
+    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
+    if (lastHashIndex !== -1 && lastHashIndex >= textBeforeCursor.lastIndexOf(' ')) {
+      const charBeforeHash = lastHashIndex > 0 ? textBeforeCursor[lastHashIndex - 1] : '';
+      if (charBeforeHash === '' || /\s/.test(charBeforeHash)) {
+        const queryText = textBeforeCursor.slice(lastHashIndex + 1);
+        if (!queryText.includes(' ')) {
+          setHashtagQuery(queryText);
+          setHashtagPosition(lastHashIndex);
+          setShowHashtagDropdown(true);
+          setShowMentionDropdown(false);
+          setMentionQuery('');
+          return;
+        }
       }
     }
+
+    // Mention suggestion trigger check
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    if (lastAtIndex !== -1 && lastAtIndex >= textBeforeCursor.lastIndexOf(' ')) {
+      const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : '';
+      if (charBeforeAt === '' || /\s/.test(charBeforeAt)) {
+        const queryText = textBeforeCursor.slice(lastAtIndex + 1);
+        if (!queryText.includes(' ')) {
+          setMentionQuery(queryText);
+          setMentionPosition(lastAtIndex);
+          setShowMentionDropdown(true);
+          setShowHashtagDropdown(false);
+          setHashtagQuery('');
+          return;
+        }
+      }
+    }
+
     setShowHashtagDropdown(false);
     setHashtagQuery('');
+    setShowMentionDropdown(false);
+    setMentionQuery('');
   };
 
   const handleSelectHashtag = (hashtag) => {
@@ -517,6 +547,30 @@ export default function PostCreateModal() {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Debounced mention suggest lists absolute cards */}
+              {showMentionDropdown && (
+                <MentionDropdown
+                  query={mentionQuery}
+                  onSelect={(username) => {
+                    const textBeforeAt = content.slice(0, mentionPosition);
+                    const textAfterCursor = contentRef.current ? content.slice(contentRef.current.selectionStart) : '';
+                    const newContent = `${textBeforeAt}@${username} ${textAfterCursor}`;
+                    setContent(newContent);
+                    setShowMentionDropdown(false);
+                    setMentionQuery('');
+                    setTimeout(() => {
+                      if (contentRef.current) {
+                        contentRef.current.focus();
+                      }
+                    }, 50);
+                  }}
+                  onClose={() => {
+                    setShowMentionDropdown(false);
+                    setMentionQuery('');
+                  }}
+                />
               )}
 
               {/* Location Tag input */}

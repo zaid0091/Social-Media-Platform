@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
+import { parseContent } from '@/utils/parseContent';
 import { 
   Heart, 
   MessageCircle, 
@@ -146,28 +147,7 @@ export default function CommentItem({ comment, onReply, onDelete, onEdit }) {
     return () => document.removeEventListener('mousedown', clickOutside);
   }, []);
 
-  // Text parser mapping #hashtags and @mentions to Next.js links
-  const parseContent = (text) => {
-    if (!text) return '';
-    const parts = text.split(/([#@][a-zA-Z0-9_]+)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('#')) {
-        return (
-          <Link key={index} href={`/search?q=${encodeURIComponent(part)}`} className="text-primary hover:underline font-bold">
-            {part}
-          </Link>
-        );
-      } else if (part.startsWith('@')) {
-        const username = part.slice(1);
-        return (
-          <Link key={index} href={`/${username}`} className="text-primary hover:underline font-bold">
-            {part}
-          </Link>
-        );
-      }
-      return part;
-    });
-  };
+
 
   const handleLikeToggle = async (e) => {
     e.stopPropagation();

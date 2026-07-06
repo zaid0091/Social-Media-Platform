@@ -152,13 +152,17 @@ export default function NotificationItem({ notification, onMarkRead, onDelete })
           <div className="flex flex-col space-y-0.5">
             <p className="text-xs text-zinc-650 dark:text-zinc-300">
               <span className="font-bold text-zinc-950 dark:text-zinc-50 mr-1">{sender?.username}</span> 
-              mentioned you in a comment.
+              {related_comment ? 'mentioned you in a comment.' : 'mentioned you in a post.'}
             </p>
-            {related_comment && (
+            {related_comment ? (
               <p className="text-[11px] italic text-zinc-500 dark:text-zinc-400 line-clamp-1">
                 "{related_comment.content}"
               </p>
-            )}
+            ) : related_post ? (
+              <p className="text-[11px] italic text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                "{related_post.content}"
+              </p>
+            ) : null}
           </div>
         );
       case 'warning':

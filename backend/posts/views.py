@@ -20,6 +20,28 @@ class PostCreateView(APIView):
         serializer = PostCreateSerializer(data=request.data)
         if serializer.is_valid():
             post = serializer.save(author=request.user)
+
+            # Mention parsing: extract @username mentions
+            content = post.content or ""
+            usernames = re.findall(r"@(\w+)", content)
+            for username in set(usernames):
+                try:
+                    mentioned_user = User.objects.get(username__iexact=username)
+                    if mentioned_user != request.user:
+                        if not BlockedUser.objects.filter(
+                            Q(blocker=request.user, blocked=mentioned_user) |
+                            Q(blocker=mentioned_user, blocked=request.user)
+                        ).exists():
+                            from notifications.utils import create_notification
+                            create_notification(
+                                recipient=mentioned_user,
+                                sender=request.user,
+                                notification_type='mention',
+                                related_post=post
+                            )
+                except User.DoesNotExist:
+                    pass
+
             return Response(PostSerializer(post, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -815,6 +837,62 @@ class QuotePostView(APIView):
 
         serializer = PostSerializer(quote, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class MentionsListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        username_query = f"@{request.user.username}"
+        
+        blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        all_blocked = set(list(blocked_users) + list(blockers))
+
+        following_ids = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+
+        posts = Post.objects.filter(
+            content__icontains=username_query,
+            is_deleted=False,
+            needs_review=False
+        ).exclude(
+            author_id__in=all_blocked
+        ).filter(
+            Q(author=request.user) | Q(author__is_private=False) | Q(author_id__in=following_ids)
+        ).order_by('-created_at')
+
+        comments = Comment.objects.filter(
+            content__icontains=username_query,
+            is_deleted=False,
+            needs_review=False
+        ).exclude(
+            author_id__in=all_blocked
+        ).filter(
+            Q(author=request.user) | Q(author__is_private=False) | Q(author_id__in=following_ids)
+        ).filter(
+            post__is_deleted=False,
+            post__needs_review=False
+        ).exclude(
+            post__author_id__in=all_blocked
+        ).filter(
+            Q(post__author=request.user) | Q(post__author__is_private=False) | Q(post__author_id__in=following_ids)
+        ).order_by('-created_at')
+
+        # Filter precisely in Python with word boundaries
+        pattern = re.compile(rf'@\b{re.escape(request.user.username)}\b', re.IGNORECASE)
+        
+        filtered_posts = [p for p in posts if pattern.search(p.content or '')]
+        filtered_comments = [c for c in comments if pattern.search(c.content or '')]
+
+        from .serializers import CommentSerializer
+        post_serializer = PostSerializer(filtered_posts, many=True, context={'request': request})
+        comment_serializer = CommentSerializer(filtered_comments, many=True, context={'request': request})
+
+        return Response({
+            "posts": post_serializer.data,
+            "comments": comment_serializer.data
+        }, status=status.HTTP_200_OK)
+
 
 
 

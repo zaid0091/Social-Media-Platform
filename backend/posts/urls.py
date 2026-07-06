@@ -6,7 +6,7 @@ from .views import (
     CommentListCreateView, CommentRepliesView, CommentUpdateView, CommentDeleteView,
     FeedView, PostExploreView,
     CollectionListCreateView, CollectionDetailView, CollectionAddPostView, CollectionRemovePostView,
-    RepostToggleView, QuotePostView
+    RepostToggleView, QuotePostView, MentionsListView
 )
 
 urlpatterns = [
@@ -24,6 +24,7 @@ urlpatterns = [
     path('comment-like/<uuid:comment_id>/', CommentLikeView.as_view(), name='comment-like-toggle'),
     path('bookmark/<uuid:post_id>/', BookmarkView.as_view(), name='bookmark-toggle'),
     path('bookmarks/', BookmarkListView.as_view(), name='bookmark-list'),
+    path('mentions/', MentionsListView.as_view(), name='mentions-list'),
     path('collections/', CollectionListCreateView.as_view(), name='collection-list-create'),
     path('collections/<uuid:collection_id>/', CollectionDetailView.as_view(), name='collection-detail'),
     path('collections/<uuid:collection_id>/add/<uuid:post_id>/', CollectionAddPostView.as_view(), name='collection-add-post'),

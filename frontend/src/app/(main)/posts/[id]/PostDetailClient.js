@@ -19,6 +19,7 @@ import VideoPlayer from '@/components/posts/VideoPlayer';
 import CommentItem from '@/components/posts/CommentItem';
 import CommentInput from '@/components/posts/CommentInput';
 import RepostCard from '@/components/posts/RepostCard';
+import { parseContent } from '@/utils/parseContent';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -282,7 +283,7 @@ export default function PostDetailClient({ id }) {
                 <Link href={`/${post.author.username}`} className="font-extrabold hover:underline mr-1.5">
                   {post.author.username}
                 </Link>
-                <span className="text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">{post.content}</span>
+                <span className="text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">{parseContent(post.content)}</span>
                 {post.repost_of && (
                   <div className="mt-2 w-full max-w-md">
                     <RepostCard post={post.repost_of} />

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { parseContent } from '@/utils/parseContent';
 import { 
   Heart, 
   MessageCircle, 
@@ -94,38 +95,6 @@ export default function PostCard({ post, onDelete }) {
   }, []);
 
   if (isHidden) return null;
-
-  // Text parser mapping #hashtags and @mentions to Next.js links
-  const parseContent = (text) => {
-    if (!text) return '';
-    const parts = text.split(/([#@][a-zA-Z0-9_]+)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('#')) {
-        const query = part.slice(1);
-        return (
-          <Link 
-            key={index} 
-            href={`/search?q=${encodeURIComponent(part)}`}
-            className="text-primary hover:underline font-bold"
-          >
-            {part}
-          </Link>
-        );
-      } else if (part.startsWith('@')) {
-        const username = part.slice(1);
-        return (
-          <Link 
-            key={index} 
-            href={`/${username}`}
-            className="text-primary hover:underline font-bold"
-          >
-            {part}
-          </Link>
-        );
-      }
-      return part;
-    });
-  };
 
   const isLongContent = post.content?.length > 280;
   const renderedContent = isExpanded 
