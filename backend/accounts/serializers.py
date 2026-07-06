@@ -138,7 +138,7 @@ class UserFollowDetailsSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'username', 'full_name', 'profile_picture', 'is_verified', 
             'is_online', 'last_seen', 'is_following', 'is_private', 
-            'follow_request_pending', 'follower_count'
+            'follow_request_pending', 'follower_count', 'bio'
         )
 
     def get_is_online(self, obj):

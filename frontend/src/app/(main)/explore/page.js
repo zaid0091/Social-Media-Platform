@@ -8,6 +8,7 @@ import Link from 'next/link';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import PostDetailModal from '@/components/posts/PostDetailModal';
+import Sparkline from '@/components/posts/Sparkline';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -32,8 +33,10 @@ export default function ExplorePage() {
   const { data: suggestionsData } = useSWR('/search/suggested/', fetcher);
   const suggestedUsers = (suggestionsData?.suggested_users || []).slice(0, 6);
 
-  // 2. Fetch trending hashtags
-  const { data: trendingHashtags = [] } = useSWR('/hashtags/trending/', fetcher);
+  // 2. Fetch trending data
+  const { data: trendingData } = useSWR('/hashtags/trending/', fetcher);
+  const trendingHashtags = trendingData?.hashtags || [];
+  const trendingTopics = trendingData?.topics || [];
 
   // 3. Load posts feed
   const loadPostsFeed = async (pageNumber, isRefresh = false) => {
@@ -139,17 +142,45 @@ export default function ExplorePage() {
 
         {/* TRENDING HASHTAGS ROW */}
         {trendingHashtags.length > 0 && (
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 rounded-3xl p-4 shadow-sm text-left">
-            <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block mb-3">Trending Topics</span>
-            <div className="flex space-x-2.5 overflow-x-auto scrollbar-none py-0.5">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 rounded-3xl p-5 shadow-sm text-left">
+            <span className="text-[10px] font-black uppercase text-zinc-450 tracking-wider block mb-4">Trending Hashtags</span>
+            <div className="flex space-x-4 overflow-x-auto scrollbar-none py-1">
               {trendingHashtags.map((tag) => (
                 <Link
-                  key={tag.id}
-                  href={`/hashtag/${tag.name}`}
-                  className="px-3.5 py-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-950 dark:hover:bg-zinc-850 text-xs font-extrabold text-zinc-700 dark:text-zinc-250 border border-zinc-150 dark:border-zinc-800 rounded-2-full shadow-sm transition flex items-center space-x-1 shrink-0"
+                  key={tag.id || tag.name}
+                  href={`/search?q=${encodeURIComponent('#' + tag.name)}`}
+                  className="px-4 py-3 bg-zinc-50 hover:bg-zinc-100/80 dark:bg-zinc-950 dark:hover:bg-zinc-900/60 border border-zinc-150 dark:border-zinc-850 rounded-2xl shadow-sm transition flex items-center space-x-4 shrink-0 w-48 justify-between group"
                 >
-                  <Hash className="h-3.5 w-3.5 text-zinc-400" />
-                  <span>{tag.name}</span>
+                  <div className="flex flex-col min-w-0 pr-1 text-left">
+                    <span className="text-xs font-black text-zinc-800 dark:text-zinc-100 truncate group-hover:underline">
+                      #{tag.name}
+                    </span>
+                    <span className="text-[9px] text-zinc-455 font-semibold mt-0.5">
+                      {tag.post_count || 0} posts
+                    </span>
+                  </div>
+                  {tag.recent_activity && (
+                    <Sparkline data={tag.recent_activity} width={50} height={16} />
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TRENDING TOPICS (KEYWORDS) ROW */}
+        {trendingTopics.length > 0 && (
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 rounded-3xl p-5 shadow-sm text-left">
+            <span className="text-[10px] font-black uppercase text-zinc-450 tracking-wider block mb-3">Popular Keywords</span>
+            <div className="flex flex-wrap gap-2 py-0.5">
+              {trendingTopics.map((topic) => (
+                <Link
+                  key={topic.name}
+                  href={`/search?q=${encodeURIComponent(topic.name)}`}
+                  className="px-3 py-1.5 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-950 dark:hover:bg-zinc-900/80 text-xs font-black text-zinc-700 dark:text-zinc-250 border border-zinc-150 dark:border-zinc-800 rounded-xl transition flex items-center space-x-1.5 shrink-0"
+                >
+                  <Flame className="h-3.5 w-3.5 text-orange-500 fill-orange-500" />
+                  <span>{topic.name}</span>
                 </Link>
               ))}
             </div>

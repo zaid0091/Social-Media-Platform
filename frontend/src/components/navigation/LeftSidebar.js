@@ -19,7 +19,8 @@ import {
   Bookmark, 
   User, 
   Settings,
-  UserPlus
+  UserPlus,
+  Sparkles
 } from 'lucide-react';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
@@ -42,6 +43,7 @@ export default function LeftSidebar() {
     { label: 'Home', href: '/', icon: Home },
     { label: 'Search', href: '/search', icon: Search },
     { label: 'Explore', href: '/explore', icon: Compass },
+    { label: 'Discover', href: '/discover', icon: Sparkles },
     { 
       label: 'Notifications', 
       href: '/notifications', 

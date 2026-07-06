@@ -12,6 +12,7 @@ import BottomNav from '@/components/navigation/BottomNav';
 import CreatePostFAB from '@/components/navigation/CreatePostFAB';
 import PostCreateModal from '@/components/posts/PostCreateModal';
 import SuggestedUsersWidget from '@/components/profile/SuggestedUsersWidget';
+import Sparkline from '@/components/posts/Sparkline';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -70,24 +71,62 @@ export default function MainLayout({ children }) {
           <SuggestedUsersWidget />
 
           {/* Trending Widget */}
-          <div className="p-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4">
-            <h3 className="font-bold text-base px-2">Trending Topics</h3>
-            <div className="flex flex-col space-y-3">
-              {trending && trending.length > 0 ? (
-                trending.slice(0, 5).map((item) => (
+          <div className="p-4.5 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4 text-left">
+            <h3 className="font-black text-sm px-1 flex items-center justify-between">
+              <span>Trending Today</span>
+              {trending?.country && (
+                <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">
+                  {trending.country}
+                </span>
+              )}
+            </h3>
+            
+            {/* Hashtags list */}
+            <div className="flex flex-col space-y-3.5">
+              {trending?.hashtags && trending.hashtags.length > 0 ? (
+                trending.hashtags.slice(0, 10).map((item) => (
                   <Link 
                     key={item.id || item.name} 
                     href={`/search?q=${encodeURIComponent('#' + item.name)}`}
-                    className="flex flex-col px-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 p-1.5 rounded-xl transition-all cursor-pointer"
+                    className="flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/40 p-1.5 rounded-xl transition-all cursor-pointer group"
                   >
-                    <span className="text-sm font-bold text-zinc-850 dark:text-zinc-150">#{item.name}</span>
-                    <span className="text-xs text-zinc-500">{item.count || 0} posts</span>
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-xs font-black text-zinc-850 dark:text-zinc-150 truncate">
+                        #{item.name}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 font-semibold mt-0.5">
+                        {item.post_count || 0} posts
+                      </span>
+                    </div>
+                    {item.recent_activity && (
+                      <Sparkline data={item.recent_activity} width={65} height={18} />
+                    )}
                   </Link>
                 ))
               ) : (
-                <p className="text-xs text-zinc-500 px-2">No trending topics right now</p>
+                <p className="text-xs text-zinc-500 px-1 font-semibold">No trending hashtags</p>
               )}
             </div>
+
+            {/* Trending topics (words) list */}
+            {trending?.topics && trending.topics.length > 0 && (
+              <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+                <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider px-1 block">
+                  Trending Topics
+                </span>
+                <div className="flex flex-wrap gap-1.5 px-1">
+                  {trending.topics.map((topic) => (
+                    <Link
+                      key={topic.name}
+                      href={`/search?q=${encodeURIComponent(topic.name)}`}
+                      className="px-2 py-1 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-black text-zinc-600 dark:text-zinc-350 rounded-lg transition"
+                    >
+                      {topic.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer Widget */}

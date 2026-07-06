@@ -457,7 +457,8 @@ class UserSuggestionView(APIView):
         else:
             suggestions = User.objects.none()
             
-        serializer = UserSerializer(suggestions, many=True, context={'request': request})
+        from .serializers import UserFollowDetailsSerializer
+        serializer = UserFollowDetailsSerializer(suggestions, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -733,6 +734,66 @@ class PasswordResetConfirmView(APIView):
             return Response({"message": "Password has been reset successfully."}, status=status.HTTP_200_OK)
         else:
             return Response({"error": "Invalid or expired reset link."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DiscoverSuggestionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        
+        # Get list of user IDs we already follow
+        following_ids = list(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+        
+        # Exclude self and already followed
+        exclude_ids = set(following_ids + [user.id])
+        
+        # 1. Popular suggestions
+        popular_users = User.objects.filter(
+            is_active=True
+        ).exclude(
+            id__in=exclude_ids
+        ).order_by('-is_verified', '-follower_count')[:15]
+        
+        # 2. New users suggestions
+        new_users = User.objects.filter(
+            is_active=True
+        ).exclude(
+            id__in=exclude_ids
+        ).order_by('-created_at')[:15]
+        
+        # 3. Network (FoF / mutual counts) suggestions
+        fof_relations = Follow.objects.filter(
+            follower_id__in=following_ids
+        ).exclude(
+            following_id__in=exclude_ids
+        ).values('following_id').annotate(
+            mutual_count=models.Count('follower_id')
+        ).order_by('-mutual_count')[:15]
+        
+        fof_ids = [item['following_id'] for item in fof_relations]
+        if fof_ids:
+            clauses = [models.When(id=uid, then=pos) for pos, uid in enumerate(fof_ids)]
+            network_users = User.objects.filter(id__in=fof_ids).order_by(models.Case(*clauses))
+        else:
+            # fallback to similar account types
+            network_users = User.objects.filter(
+                is_active=True,
+                account_type=user.account_type
+            ).exclude(
+                id__in=exclude_ids
+            ).order_by('-follower_count')[:15]
+            
+        from .serializers import UserFollowDetailsSerializer
+        popular_serialized = UserFollowDetailsSerializer(popular_users, many=True, context={'request': request})
+        new_serialized = UserFollowDetailsSerializer(new_users, many=True, context={'request': request})
+        network_serialized = UserFollowDetailsSerializer(network_users, many=True, context={'request': request})
+        
+        return Response({
+            "popular": popular_serialized.data,
+            "new_users": new_serialized.data,
+            "network": network_serialized.data
+        }, status=status.HTTP_200_OK)
 
 
 

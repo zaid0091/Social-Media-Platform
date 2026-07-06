@@ -90,11 +90,21 @@ class HashtagsAPITests(TestCase):
         result = recalculate_trending_hashtags()
         self.assertTrue(len(result) > 0)
 
-        # GET trending endpoint -> should return data from cache
+        # GET trending endpoint
         res = self.client.get("/api/v1/hashtags/trending/")
         self.assertEqual(res.status_code, 200)
-        # Verify both tags are returned (since they have posts in the last 24h)
-        self.assertTrue(len(res.data) >= 2)
+        # Verify new dictionary structure is returned
+        self.assertIn("hashtags", res.data)
+        self.assertIn("topics", res.data)
+        self.assertIn("country", res.data)
+        self.assertTrue(len(res.data["hashtags"]) >= 2)
+
+    def test_discover_suggestions_api(self):
+        res = self.client.get("/api/v1/users/suggestions/discover/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("popular", res.data)
+        self.assertIn("new_users", res.data)
+        self.assertIn("network", res.data)
 
     def test_hard_deletion_signals_sync_counts(self):
         # Initial post_count of #news is 1

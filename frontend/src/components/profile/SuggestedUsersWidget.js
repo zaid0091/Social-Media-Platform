@@ -40,8 +40,8 @@ export default function SuggestedUsersWidget() {
     );
   }
 
-  // Cap suggestions list to 5 items
-  const displaySuggestions = suggestions.slice(0, 5);
+  // Cap suggestions list to 3 items as a Who To Follow widget
+  const displaySuggestions = suggestions.slice(0, 3);
 
   if (displaySuggestions.length === 0) return null;
 
@@ -52,10 +52,10 @@ export default function SuggestedUsersWidget() {
       <div className="flex items-center justify-between">
         <h3 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider flex items-center space-x-1">
           <Sparkles className="h-3 w-3 text-primary fill-primary" />
-          <span>Creators for You</span>
+          <span>Who to follow</span>
         </h3>
         <Link 
-          href="/explore" 
+          href="/discover" 
           className="text-[10px] font-black text-primary hover:underline cursor-pointer select-none"
         >
           See More
@@ -65,30 +65,40 @@ export default function SuggestedUsersWidget() {
       {/* Suggested profiles list map */}
       <div className="flex flex-col space-y-3.5">
         {displaySuggestions.map((u) => (
-          <div key={u.id} className="flex items-center justify-between space-x-3">
+          <div key={u.id} className="flex items-start justify-between space-x-3">
             <Link 
               href={`/${u.username}`} 
-              className="flex items-center space-x-2.5 min-w-0 group"
+              className="flex items-start space-x-2.5 min-w-0 group"
             >
               {u.profile_picture ? (
                 <img
                   src={u.profile_picture}
                   alt={u.username}
-                  className="h-8.5 w-8.5 rounded-full object-cover shrink-0 border border-zinc-100 dark:border-zinc-800"
+                  className="h-8.5 w-8.5 rounded-full object-cover shrink-0 border border-zinc-100 dark:border-zinc-800 mt-0.5"
                 />
               ) : (
-                <div className="h-8.5 w-8.5 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0">
+                <div className="h-8.5 w-8.5 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0 mt-0.5">
                   {u.username?.charAt(0).toUpperCase()}
                 </div>
               )}
               
               <div className="flex flex-col min-w-0">
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-50 truncate group-hover:underline leading-tight">
-                  @{u.username}
-                </span>
-                <span className="text-[9px] text-zinc-400 font-semibold truncate leading-none mt-0.5">
-                  {u.follower_count || 0} followers
-                </span>
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs font-black text-zinc-900 dark:text-zinc-50 truncate group-hover:underline leading-none">
+                    {u.full_name || `@${u.username}`}
+                  </span>
+                  {u.is_verified && <span className="text-blue-500 text-[10px]">✓</span>}
+                </div>
+                {u.full_name && (
+                  <span className="text-[9px] text-zinc-400 font-semibold leading-none mt-0.5">
+                    @{u.username}
+                  </span>
+                )}
+                {u.bio && (
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-450 font-medium line-clamp-1 mt-1 leading-tight break-words">
+                    {u.bio}
+                  </p>
+                )}
               </div>
             </Link>
 
@@ -98,9 +108,9 @@ export default function SuggestedUsersWidget() {
               initialIsFollowing={u.is_following}
               initialFollowRequestPending={u.follow_request_pending}
               isPrivate={u.is_private}
-              className="!px-2.5 !py-1 text-[10px]"
+              className="!px-2.5 !py-1 text-[10px] shrink-0 mt-0.5"
               onStateChange={() => {
-                // Mutate SWR suggestion cards on follow status update
+                // Mutate SWR suggestions on follow status update to refresh list
                 mutate();
               }}
             />

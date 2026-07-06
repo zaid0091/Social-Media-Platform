@@ -6,7 +6,8 @@ from .views import (
     DeleteAccountView, UserSearchView, UserSuggestionView,
     FollowView, UnfollowView, FollowRequestListView, FollowRequestActionView,
     FollowerListView, FollowingListView, BlockUserView, UnblockUserView, BlockedUserListView,
-    GetUserPresenceView, PasswordResetRequestView, PasswordResetConfirmView
+    GetUserPresenceView, PasswordResetRequestView, PasswordResetConfirmView,
+    DiscoverSuggestionsView
 )
 
 urlpatterns = [
@@ -25,6 +26,7 @@ urlpatterns = [
     path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),
     path('search/', UserSearchView.as_view(), name='user-search'),
     path('suggestions/', UserSuggestionView.as_view(), name='user-suggestions'),
+    path('suggestions/discover/', DiscoverSuggestionsView.as_view(), name='discover-suggestions'),
 
     # Follow / Block System endpoints
     path('follow/<uuid:user_id>/', FollowView.as_view(), name='follow'),
