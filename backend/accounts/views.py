@@ -307,34 +307,40 @@ class PublicProfileView(APIView):
         except User.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Enforce block policy: Return 404 if blocked in either direction
+        # Enforce block policy:
         from .models import BlockedUser
-        if BlockedUser.objects.filter(
-            Q(blocker=request.user, blocked=target_user) |
-            Q(blocker=target_user, blocked=request.user)
-        ).exists():
+        # If target_user blocked request.user -> Return 404
+        if BlockedUser.objects.filter(blocker=target_user, blocked=request.user).exists():
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        has_blocked_target = BlockedUser.objects.filter(blocker=request.user, blocked=target_user).exists()
+        
+        is_restricted = False
+        from .models import RestrictedUser
+        is_restricted = RestrictedUser.objects.filter(restrictor=request.user, restricted=target_user).exists()
 
         is_self = (request.user == target_user)
         is_following = False
         follow_request_pending = False
-        if not is_self:
+        if not is_self and not has_blocked_target:
             is_following = Follow.objects.filter(follower=request.user, following=target_user).exists()
             if not is_following and target_user.is_private:
                 follow_request_pending = FollowRequest.objects.filter(
                     requester=request.user, receiver=target_user, status='pending'
                 ).exists()
 
-        is_accessible = not target_user.is_private or is_self or is_following
+        is_accessible = (not target_user.is_private or is_self or is_following) and not has_blocked_target
 
         serializer_data = UserSerializer(target_user).data
         serializer_data['is_following'] = is_following
         serializer_data['is_self'] = is_self
         serializer_data['is_accessible'] = is_accessible
         serializer_data['follow_request_pending'] = follow_request_pending
+        serializer_data['is_blocked'] = has_blocked_target
+        serializer_data['is_restricted'] = is_restricted
 
         if not is_accessible:
-            # Hide sensitive fields for private profile if not followed
+            # Hide sensitive fields for private profile if not followed or blocked
             sensitive_fields = ['email', 'phone_number', 'date_of_birth', 'website', 'location']
             for field in sensitive_fields:
                 serializer_data[field] = None
@@ -794,6 +800,39 @@ class DiscoverSuggestionsView(APIView):
             "new_users": new_serialized.data,
             "network": network_serialized.data
         }, status=status.HTTP_200_OK)
+
+
+class RestrictUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user == target_user:
+            return Response({"error": "You cannot restrict yourself."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import RestrictedUser
+        RestrictedUser.objects.get_or_create(restrictor=request.user, restricted=target_user)
+        return Response({"message": "User restricted successfully."}, status=status.HTTP_200_OK)
+
+
+class UnrestrictUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, *args, **kwargs):
+        try:
+            target_user = User.objects.get(id=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from .models import RestrictedUser
+        deleted, _ = RestrictedUser.objects.filter(restrictor=request.user, restricted=target_user).delete()
+        if deleted:
+            return Response({"message": "User unrestricted successfully."}, status=status.HTTP_200_OK)
+        return Response({"message": "You had not restricted this user."}, status=status.HTTP_200_OK)
 
 
 

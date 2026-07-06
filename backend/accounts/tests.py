@@ -351,14 +351,83 @@ class AccountsFollowSystemTests(TestCase):
         self.assertEqual(self.user.following_count, 0)
         self.assertEqual(self.user.follower_count, 0)
 
-        # Verify blocked user profile returns 404
+        # Verify blocker (self.user) visiting blocked user (self.public_user) can view, but marked is_blocked
         res = self.client.get(f"/api/v1/users/profile/{self.public_user.username}/")
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["is_blocked"])
+        self.assertFalse(res.data["is_accessible"])
 
         # Authenticate as blocked user to try and view blocker profile -> returns 404
         self.client.force_authenticate(user=self.public_user)
         res = self.client.get(f"/api/v1/users/profile/{self.user.username}/")
         self.assertEqual(res.status_code, 404)
+
+        # Authenticate back as blocker
+        self.client.force_authenticate(user=self.user)
+
+        # Unblock
+        res = self.client.post(f"/api/v1/users/unblock/{self.public_user.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "User unblocked successfully.")
+
+        # Now test Restrict User
+        res = self.client.post(f"/api/v1/users/restrict/{self.public_user.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "User restricted successfully.")
+
+        # Verify restrict status on profile
+        res = self.client.get(f"/api/v1/users/profile/{self.public_user.username}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["is_restricted"])
+
+        # Test comment restriction visibility logic
+        from posts.models import Post, Comment
+        # 1. Self.user creates a post
+        post = Post.objects.create(author=self.user, content="Block/Restrict post", post_type="text")
+        
+        # 2. Restricted user (public_user) comments on it
+        self.client.force_authenticate(user=self.public_user)
+        comment_res = self.client.post(f"/api/v1/posts/{post.id}/comments/", {"content": "Hello restricted comment"})
+        self.assertEqual(comment_res.status_code, 201)
+        comment_id = comment_res.data["id"]
+
+        # List comments as restricted user -> should see own comment
+        res = self.client.get(f"/api/v1/posts/{post.id}/comments/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)
+        self.assertEqual(res.data["results"][0]["id"], comment_id)
+
+        # List comments as post author (self.user) -> should see restricted user's comment
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get(f"/api/v1/posts/{post.id}/comments/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)
+        self.assertEqual(res.data["results"][0]["id"], comment_id)
+
+        # Create a third unrelated user
+        other_user = User.objects.create_user(
+            username="otheruser",
+            email="other@example.com",
+            password="Password123!",
+            is_active=True
+        )
+        self.client.force_authenticate(user=other_user)
+        # List comments as third user -> should NOT see the restricted user's comment!
+        res = self.client.get(f"/api/v1/posts/{post.id}/comments/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 0)
+
+        # Unrestrict the user
+        self.client.force_authenticate(user=self.user)
+        res = self.client.post(f"/api/v1/users/unrestrict/{self.public_user.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["message"], "User unrestricted successfully.")
+
+        # Verify comment is now visible to the third user
+        self.client.force_authenticate(user=other_user)
+        res = self.client.get(f"/api/v1/posts/{post.id}/comments/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)
 
 
 from django.test import TransactionTestCase, override_settings

@@ -416,6 +416,19 @@ class CommentListCreateView(APIView):
 
         comments = comments.exclude(author_id__in=all_blocked)
 
+        # Restriction Filter
+        from accounts.models import RestrictedUser
+        restricted_by_author = RestrictedUser.objects.filter(restrictor=post.author).values_list('restricted_id', flat=True)
+        if restricted_by_author.exists() and request.user != post.author:
+            if request.user.is_authenticated:
+                comments = comments.filter(
+                    Q(author=request.user) | ~Q(author_id__in=restricted_by_author)
+                )
+            else:
+                comments = comments.exclude(
+                    author_id__in=restricted_by_author
+                )
+
         paginator = PageNumberPagination()
         paginator.page_size = 10
         result_page = paginator.paginate_queryset(comments, request)
@@ -488,6 +501,20 @@ class CommentRepliesView(APIView):
         all_blocked = set(list(blocked_users) + list(blockers))
 
         replies = replies.exclude(author_id__in=all_blocked)
+
+        # Restriction Filter
+        from accounts.models import RestrictedUser
+        post_obj = comment.post
+        restricted_by_author = RestrictedUser.objects.filter(restrictor=post_obj.author).values_list('restricted_id', flat=True)
+        if restricted_by_author.exists() and request.user != post_obj.author:
+            if request.user.is_authenticated:
+                replies = replies.filter(
+                    Q(author=request.user) | ~Q(author_id__in=restricted_by_author)
+                )
+            else:
+                replies = replies.exclude(
+                    author_id__in=restricted_by_author
+                )
 
         paginator = PageNumberPagination()
         paginator.page_size = 10

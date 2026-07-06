@@ -16,8 +16,12 @@ import {
   Link as LinkIcon,
   Check,
   X,
-  Repeat2
+  Repeat2,
+  Edit,
+  ShieldAlert
 } from 'lucide-react';
+import ConfirmDialog from '../ui/ConfirmDialog';
+import ReportModal from '../moderation/ReportModal';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import CarouselComponent from './CarouselComponent';
@@ -64,6 +68,15 @@ export default function PostCard({ post, onDelete }) {
   const [animateHeart, setAnimateHeart] = useState(false);
   const [toast, setToast] = useState(null);
 
+  const [postContent, setPostContent] = useState(post.content);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(post.content || '');
+
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isBlockConfirmOpen, setIsBlockConfirmOpen] = useState(false);
+  const [isRestrictConfirmOpen, setIsRestrictConfirmOpen] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
+
   const menuRef = useRef(null);
   const bookmarkRef = useRef(null);
   const repostRef = useRef(null);
@@ -75,6 +88,7 @@ export default function PostCard({ post, onDelete }) {
     setIsBookmarked(post.is_bookmarked);
     setIsReposted(post.is_reposted);
     setRepostCount(post.repost_count || 0);
+    setPostContent(post.content);
   }, [post]);
 
   // Click outside listener to auto-close options dropdown, bookmark menu, and repost menu
@@ -96,10 +110,10 @@ export default function PostCard({ post, onDelete }) {
 
   if (isHidden) return null;
 
-  const isLongContent = post.content?.length > 280;
+  const isLongContent = postContent?.length > 280;
   const renderedContent = isExpanded 
-    ? post.content 
-    : post.content?.slice(0, 280);
+    ? postContent 
+    : postContent?.slice(0, 280);
 
   // Optimistic Like toggles
   const handleLikeToggle = async (e) => {
@@ -192,6 +206,51 @@ export default function PostCard({ post, onDelete }) {
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!editContent.trim()) return;
+    try {
+      await api.patch(`/posts/${post.id}/update/`, { content: editContent });
+      setPostContent(editContent);
+      setIsEditing(false);
+      setToast('Post updated successfully');
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setToast('Failed to update post');
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const handleBlockUser = async () => {
+    setLoadingAction(true);
+    try {
+      await api.post(`/users/block/${post.author.id}/`);
+      setIsBlockConfirmOpen(false);
+      setIsHidden(true);
+      setToast('User blocked');
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Failed to block user');
+      setTimeout(() => setToast(null), 2500);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleRestrictUser = async () => {
+    setLoadingAction(true);
+    try {
+      await api.post(`/users/restrict/${post.author.id}/`);
+      setIsRestrictConfirmOpen(false);
+      setToast('User restricted');
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Failed to restrict user');
+      setTimeout(() => setToast(null), 2500);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
   const isOwnPost = currentUser && post.author.id === currentUser.id;
 
   return (
@@ -273,13 +332,27 @@ export default function PostCard({ post, onDelete }) {
               </button>
 
               {isOwnPost ? (
-                <button
-                  onClick={handleDeletePost}
-                  className="w-full text-left px-4 py-2.5 text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete Post</span>
-                </button>
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditing(true);
+                      setEditContent(postContent || '');
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
+                  >
+                    <Edit className="h-4 w-4 text-zinc-500" />
+                    <span>Edit Post</span>
+                  </button>
+                  <button
+                    onClick={handleDeletePost}
+                    className="w-full text-left px-4 py-2.5 text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete Post</span>
+                  </button>
+                </>
               ) : (
                 <>
                   <button
@@ -287,21 +360,43 @@ export default function PostCard({ post, onDelete }) {
                       setIsHidden(true);
                       setIsMenuOpen(false);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer"
+                    className="w-full text-left px-4 py-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
                   >
                     <EyeOff className="h-4 w-4" />
                     <span>Hide Post</span>
                   </button>
                   <button
-                    onClick={() => {
-                      setToast('Report submitted. Thank you.');
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsReportOpen(true);
                       setIsMenuOpen(false);
-                      setTimeout(() => setToast(null), 2500);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-amber-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer"
+                    className="w-full text-left px-4 py-2.5 text-amber-550 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
                   >
                     <AlertTriangle className="h-4 w-4" />
                     <span>Report Post</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsRestrictConfirmOpen(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
+                  >
+                    <ShieldAlert className="h-4 w-4 text-orange-400" />
+                    <span>Restrict User</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsBlockConfirmOpen(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <span>Block User</span>
                   </button>
                 </>
               )}
@@ -311,18 +406,43 @@ export default function PostCard({ post, onDelete }) {
       </div>
 
       {/* 2. Post content text details */}
-      {post.content && (
-        <div className="px-4 pb-2.5 text-[15px] leading-relaxed text-zinc-800 dark:text-zinc-150 whitespace-pre-wrap">
-          {parseContent(renderedContent)}
-          {isLongContent && (
+      {isEditing ? (
+        <div className="px-4 pb-3 space-y-2">
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="w-full p-3 text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary text-zinc-800 dark:text-zinc-100"
+            rows="3"
+          />
+          <div className="flex justify-end space-x-2">
             <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-primary hover:underline font-bold text-sm ml-1 cursor-pointer block mt-1"
+              onClick={() => setIsEditing(false)}
+              className="px-3.5 py-1.5 border border-zinc-250 dark:border-zinc-800 text-xs font-black text-zinc-700 dark:text-zinc-300 rounded-xl hover:bg-zinc-55 dark:hover:bg-zinc-800 transition cursor-pointer select-none"
             >
-              {isExpanded ? 'See less' : 'See more'}
+              Cancel
             </button>
-          )}
+            <button
+              onClick={handleSaveEdit}
+              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-xs font-black text-white rounded-xl shadow-sm transition cursor-pointer select-none"
+            >
+              Save
+            </button>
+          </div>
         </div>
+      ) : (
+        postContent && (
+          <div className="px-4 pb-2.5 text-[15px] leading-relaxed text-zinc-800 dark:text-zinc-150 whitespace-pre-wrap">
+            {parseContent(renderedContent)}
+            {isLongContent && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-primary hover:underline font-bold text-sm ml-1 cursor-pointer block mt-1"
+              >
+                {isExpanded ? 'See less' : 'See more'}
+              </button>
+            )}
+          </div>
+        )
       )}
 
       {/* 3. Media Panel wrapper */}
@@ -507,6 +627,40 @@ export default function PostCard({ post, onDelete }) {
           setToast('Quote posted successfully!');
           setTimeout(() => setToast(null), 2500);
         }}
+      />
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        targetType="post"
+        targetId={post.id}
+      />
+
+      {/* Confirm Block Dialog */}
+      <ConfirmDialog
+        isOpen={isBlockConfirmOpen}
+        title="Block User?"
+        message={`Are you sure you want to block @${post.author.username}? This will unfollow them, hide their posts, and prevent them from seeing your profile or posts.`}
+        confirmLabel="Block"
+        cancelLabel="Cancel"
+        isDangerous={true}
+        isLoading={loadingAction}
+        onConfirm={handleBlockUser}
+        onCancel={() => setIsBlockConfirmOpen(false)}
+      />
+
+      {/* Confirm Restrict Dialog */}
+      <ConfirmDialog
+        isOpen={isRestrictConfirmOpen}
+        title="Restrict User?"
+        message={`Are you sure you want to restrict @${post.author.username}? Their comments on your posts will only be visible to them, and they won't see when you're online.`}
+        confirmLabel="Restrict"
+        cancelLabel="Cancel"
+        isDangerous={false}
+        isLoading={loadingAction}
+        onConfirm={handleRestrictUser}
+        onCancel={() => setIsRestrictConfirmOpen(false)}
       />
     </div>
   );

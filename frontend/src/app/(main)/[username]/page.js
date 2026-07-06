@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
@@ -24,8 +24,14 @@ import {
   Globe,
   Plus,
   FolderHeart,
-  Settings
+  Settings,
+  MoreHorizontal,
+  ShieldAlert,
+  AlertTriangle,
+  Check
 } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import ReportModal from '@/components/moderation/ReportModal';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -80,6 +86,104 @@ export default function ProfilePage() {
     profile?.is_accessible ? `/stories/highlights/user/${profile.username}/` : null,
     fetcher
   );
+
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isBlockConfirmOpen, setIsBlockConfirmOpen] = useState(false);
+  const [isRestrictConfirmOpen, setIsRestrictConfirmOpen] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const profileMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const handleBlockToggle = async () => {
+    setLoadingAction(true);
+    try {
+      if (profile.is_blocked) {
+        await api.post(`/users/unblock/${profile.id}/`);
+        mutateProfile({
+          ...profile,
+          is_blocked: false,
+          is_accessible: !profile.is_private || profile.is_following
+        }, { revalidate: true });
+        setToast('User unblocked');
+      } else {
+        await api.post(`/users/block/${profile.id}/`);
+        mutateProfile({
+          ...profile,
+          is_blocked: true,
+          is_accessible: false,
+          is_following: false,
+          follow_request_pending: false
+        }, { revalidate: true });
+        setToast('User blocked');
+      }
+      setIsBlockConfirmOpen(false);
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Action failed');
+      setTimeout(() => setToast(null), 2500);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleUnblockProfile = async () => {
+    setLoadingAction(true);
+    try {
+      await api.post(`/users/unblock/${profile.id}/`);
+      mutateProfile({
+        ...profile,
+        is_blocked: false,
+        is_accessible: !profile.is_private || profile.is_following
+      }, { revalidate: true });
+      setToast('User unblocked');
+      setTimeout(() => setToast(null), 2550);
+    } catch (err) {
+      setToast('Failed to unblock user');
+      setTimeout(() => setToast(null), 2550);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleRestrictToggle = async () => {
+    setLoadingAction(true);
+    try {
+      if (profile.is_restricted) {
+        await api.post(`/users/unrestrict/${profile.id}/`);
+        mutateProfile({
+          ...profile,
+          is_restricted: false
+        }, { revalidate: true });
+        setToast('User unrestricted');
+      } else {
+        await api.post(`/users/restrict/${profile.id}/`);
+        mutateProfile({
+          ...profile,
+          is_restricted: true
+        }, { revalidate: true });
+        setToast('User restricted');
+      }
+      setIsRestrictConfirmOpen(false);
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Action failed');
+      setTimeout(() => setToast(null), 2500);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
 
 
 
@@ -160,7 +264,7 @@ export default function ProfilePage() {
               <>
                 <button
                   onClick={() => router.push(`/messages?userId=${profile.id}`)}
-                  className="p-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-650 hover:text-zinc-900 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                  className="p-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-655 hover:text-zinc-900 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                   aria-label="Send Message"
                 >
                   <MessageSquare className="h-5 w-5" />
@@ -184,6 +288,54 @@ export default function ProfilePage() {
                   }}
                   className="!px-4 !py-2 text-sm"
                 />
+
+                {/* Profile Options dropdown */}
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="p-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-655 hover:text-zinc-900 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer select-none"
+                    aria-label="More Options"
+                  >
+                    <MoreHorizontal className="h-5 w-5" />
+                  </button>
+                  {isProfileMenuOpen && (
+                    <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-25 py-1 text-sm font-semibold overflow-hidden text-left">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsReportOpen(true);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-amber-550 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
+                      >
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>Report User</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsRestrictConfirmOpen(true);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer border-b border-zinc-100 dark:border-zinc-800"
+                      >
+                        <ShieldAlert className="h-4 w-4 text-orange-400" />
+                        <span>{profile.is_restricted ? 'Unrestrict User' : 'Restrict User'}</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsBlockConfirmOpen(true);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-2 cursor-pointer"
+                      >
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        <span>{profile.is_blocked ? 'Unblock User' : 'Block User'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -347,7 +499,26 @@ export default function ProfilePage() {
 
       {/* 5. Main Content Panel */}
       <div className="p-4 sm:p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/10 flex-1">
-        {!profile.is_accessible ? (
+        {profile.is_blocked ? (
+          /* Blocked Profile Locked Card */
+          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+            <div className="h-16 w-16 bg-red-50 dark:bg-red-950/20 rounded-full flex items-center justify-center border border-red-100 dark:border-red-900/50 text-red-500">
+              <ShieldAlert className="h-7 w-7" />
+            </div>
+            <div className="flex flex-col space-y-1.5 max-w-sm">
+              <h3 className="font-extrabold text-lg text-red-500">You Blocked This User</h3>
+              <p className="text-sm text-zinc-500 font-semibold leading-relaxed">
+                You blocked @{profile.username}. Unblock them to view their posts, photos, and updates.
+              </p>
+              <button
+                onClick={handleUnblockProfile}
+                className="mt-4 px-4 py-2 bg-primary hover:bg-primary-hover text-xs font-black text-white rounded-xl shadow-sm transition cursor-pointer select-none"
+              >
+                Unblock User
+              </button>
+            </div>
+          </div>
+        ) : !profile.is_accessible ? (
           /* Private Profile Locked Card */
           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
             <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-850 rounded-full flex items-center justify-center border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300">
@@ -355,7 +526,7 @@ export default function ProfilePage() {
             </div>
             <div className="flex flex-col space-y-1.5 max-w-sm">
               <h3 className="font-extrabold text-lg">This Account is Private</h3>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-zinc-500 font-semibold">
                 Follow this account to see their photos, videos, and real-time updates.
               </p>
             </div>
@@ -452,6 +623,56 @@ export default function ProfilePage() {
           onStoryViewed={() => {}} // No-op
         />
       )}
+
+      {/* Toast Alert overlay */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-55 px-3 py-2.5 bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-md animate-in slide-in-from-bottom-5 duration-200">
+          <Check className="h-4 w-4 text-emerald-500" />
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Report User Modal */}
+      <ReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        targetType="user"
+        targetId={profile.id}
+      />
+
+      {/* Block Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={isBlockConfirmOpen}
+        title={profile.is_blocked ? "Unblock User?" : "Block User?"}
+        message={
+          profile.is_blocked 
+            ? `Are you sure you want to unblock @${profile.username}? They will be able to see your posts and send follow requests.`
+            : `Are you sure you want to block @${profile.username}? They won't be able to see your profile or posts, and any mutual follow connections will be removed.`
+        }
+        confirmLabel={profile.is_blocked ? "Unblock" : "Block"}
+        cancelLabel="Cancel"
+        isDangerous={!profile.is_blocked}
+        isLoading={loadingAction}
+        onConfirm={handleBlockToggle}
+        onCancel={() => setIsBlockConfirmOpen(false)}
+      />
+
+      {/* Restrict Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={isRestrictConfirmOpen}
+        title={profile.is_restricted ? "Unrestrict User?" : "Restrict User?"}
+        message={
+          profile.is_restricted 
+            ? `Are you sure you want to unrestrict @${profile.username}? Their new comments will immediately be visible to all users.`
+            : `Are you sure you want to restrict @${profile.username}? Their new comments on your posts will only be visible to them, and they won't see when you're online.`
+        }
+        confirmLabel={profile.is_restricted ? "Unrestrict" : "Restrict"}
+        cancelLabel="Cancel"
+        isDangerous={false}
+        isLoading={loadingAction}
+        onConfirm={handleRestrictToggle}
+        onCancel={() => setIsRestrictConfirmOpen(false)}
+      />
     </div>
   );
 }

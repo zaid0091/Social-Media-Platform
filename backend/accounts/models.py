@@ -101,3 +101,18 @@ class UserDevice(models.Model):
         return f"{self.user.username} device login from {self.ip_address}"
 
 
+class RestrictedUser(models.Model):
+    restrictor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='restricting_relations')
+    restricted = models.ForeignKey(User, on_delete=models.CASCADE, related_name='restricted_relations')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['restrictor', 'restricted'], name='unique_restrictions')
+        ]
+
+    def __str__(self):
+        return f"{self.restrictor} restricted {self.restricted}"
+
+
+
