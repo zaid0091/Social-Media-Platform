@@ -115,7 +115,16 @@ class StoriesAPITests(TestCase):
         self.assertEqual(res.data[0]["author"]["username"], "story_creator")
         self.assertEqual(res.data[0]["stories"][0]["id"], str(story.id))
 
+        # Test that the creator (self.user) can also retrieve their own stories
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get("/api/v1/stories/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["author"]["username"], "story_creator")
+        self.assertEqual(res.data[0]["stories"][0]["id"], str(story.id))
+
         # Test block exclusion
+        self.client.force_authenticate(user=self.viewer)
         BlockedUser.objects.create(blocker=self.user, blocked=self.viewer)
         res = self.client.get("/api/v1/stories/")
         self.assertEqual(res.status_code, 200)

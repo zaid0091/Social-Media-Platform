@@ -80,13 +80,15 @@ class StoryListView(APIView):
     def get(self, request, *args, **kwargs):
         now = timezone.now()
         followed_ids = list(Follow.objects.filter(follower=request.user).values_list('following_id', flat=True))
+        # Include request.user in the story search space
+        followed_ids.append(request.user.id)
 
         # Filter out blocked users
         blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
         blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
         all_blocked = set(list(blocked_users) + list(blockers))
 
-        # Active stories from followed profiles
+        # Active stories from followed profiles (including self)
         stories = Story.objects.filter(
             author_id__in=followed_ids,
             expires_at__gt=now,
@@ -102,7 +104,19 @@ class StoryListView(APIView):
             grouped[story.author].append(story)
 
         response_data = []
+
+        # Put self's story group first if exists
+        self_stories = [s for s in stories if s.author == request.user]
+        if self_stories:
+            from accounts.serializers import UserFollowDetailsSerializer
+            response_data.append({
+                "author": UserFollowDetailsSerializer(request.user, context={'request': request}).data,
+                "stories": StorySerializer(self_stories, many=True, context={'request': request}).data
+            })
+
         for author, author_stories in grouped.items():
+            if author == request.user:
+                continue
             from accounts.serializers import UserFollowDetailsSerializer
             response_data.append({
                 "author": UserFollowDetailsSerializer(author, context={'request': request}).data,

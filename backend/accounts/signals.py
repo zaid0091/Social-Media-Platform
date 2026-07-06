@@ -9,10 +9,12 @@ def increment_follow_counters(sender, instance, created, **kwargs):
         # Increment following_count on the follower
         instance.follower.following_count = F('following_count') + 1
         instance.follower.save(update_fields=['following_count'])
+        instance.follower.refresh_from_db()
 
         # Increment follower_count on the user being followed
         instance.following.follower_count = F('follower_count') + 1
         instance.following.save(update_fields=['follower_count'])
+        instance.following.refresh_from_db()
 
 @receiver(post_delete, sender=Follow)
 def decrement_follow_counters(sender, instance, **kwargs):
@@ -22,6 +24,7 @@ def decrement_follow_counters(sender, instance, **kwargs):
     if follower.following_count > 0:
         follower.following_count = F('following_count') - 1
         follower.save(update_fields=['following_count'])
+        follower.refresh_from_db()
 
     # Decrement follower_count on the user being followed (ensuring it doesn't drop below 0)
     following = instance.following
@@ -29,3 +32,4 @@ def decrement_follow_counters(sender, instance, **kwargs):
     if following.follower_count > 0:
         following.follower_count = F('follower_count') - 1
         following.save(update_fields=['follower_count'])
+        following.refresh_from_db()
