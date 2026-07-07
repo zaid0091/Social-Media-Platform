@@ -9,55 +9,40 @@ import SkeletonPostCard from '@/components/posts/SkeletonPostCard';
 import StoriesBar from '@/components/stories/StoriesBar';
 import { ArrowUp, RefreshCw, Compass, Users } from 'lucide-react';
 import Link from 'next/link';
+import useFeed from '@/hooks/useFeed';
 
 export default function HomeFeedPage() {
   const { user: currentUser, accessToken } = useAuthStore();
   
-  // Feed list states
-  const [posts, setPosts] = useState([]);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [hasNextPage, setHasNextPage] = useState(true);
+  // Feed list state and actions from Zustand store
+  const {
+    posts,
+    page,
+    loading,
+    error,
+    hasNextPage,
+    newPostsAvailable,
+    setPage,
+    setNewPostsAvailable,
+    fetchFeedPage,
+    handlePostDeleted,
+    refreshFeed
+  } = useFeed();
 
-  // WebSocket notifications states
-  const [newPostsAvailable, setNewPostsAvailable] = useState(false);
   const socketRef = useRef(null);
   const observerTargetRef = useRef(null);
-
-  // Fetch feed function
-  const fetchFeedPage = async (pageNumber, isRefresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.get(`/posts/feed/?page=${pageNumber}`);
-      const results = res.data.results || [];
-      
-      setPosts((prev) => {
-        if (isRefresh) return results;
-        const existingIds = new Set(prev.map(p => p.id));
-        const uniqueNewResults = results.filter(p => !existingIds.has(p.id));
-        return [...prev, ...uniqueNewResults];
-      });
-      setHasNextPage(!!res.data.next);
-    } catch (err) {
-      setError('Failed to load posts feed. Please check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Initial load
   useEffect(() => {
     fetchFeedPage(1, true);
-  }, []);
+  }, [fetchFeedPage]);
 
   // Next page loading trigger
   useEffect(() => {
     if (page > 1) {
       fetchFeedPage(page, false);
     }
-  }, [page]);
+  }, [page, fetchFeedPage]);
 
   // WebSocket Connection listener for real-time feed notifications
   useEffect(() => {
@@ -83,7 +68,7 @@ export default function HomeFeedPage() {
     return () => {
       if (ws) ws.close();
     };
-  }, [accessToken, currentUser]);
+  }, [accessToken, currentUser, setNewPostsAvailable]);
 
   // Intersection Observer for Infinite Scroll detecting feed bottom scroll
   useEffect(() => {
@@ -103,16 +88,10 @@ export default function HomeFeedPage() {
     return () => {
       if (target) observer.unobserve(target);
     };
-  }, [hasNextPage, loading]);
+  }, [hasNextPage, loading, setPage]);
 
   const handleRefreshFeed = () => {
-    setNewPostsAvailable(false);
-    setPage(1);
-    fetchFeedPage(1, true);
-  };
-
-  const handlePostDeleted = (deletedId) => {
-    setPosts((prev) => prev.filter((p) => p.id !== deletedId));
+    refreshFeed();
   };
 
   // Dynamic fetcher for stories

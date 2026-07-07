@@ -2,14 +2,12 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import useSWR from 'swr';
 import { Search, Mail, SquarePen, Users, ArrowLeft } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import useMessages from '@/hooks/useMessages';
 import NewConversationModal from '@/components/messaging/NewConversationModal';
 import ChatWindow from '@/components/messaging/ChatWindow';
-
-const fetcher = (url) => api.get(url).then((res) => res.data);
 
 function MessagesClient() {
   const router = useRouter();
@@ -20,14 +18,18 @@ function MessagesClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Fetch conversation lists
-  const { data, error, mutate, isLoading } = useSWR(
-    '/messaging/conversations/',
-    fetcher,
-    { refreshInterval: 15000 }
-  );
+  // Use Zustand messaging store
+  const {
+    conversations: conversationsList,
+    loading: isLoading,
+    error,
+    fetchConversations
+  } = useMessages();
 
-  const conversationsList = data?.results || [];
+  // Fetch conversations list initially
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
   // Handle direct conversation creation if redirected from a user profile (?userId=...)
   const targetUserId = searchParams.get('userId');
@@ -40,7 +42,7 @@ function MessagesClient() {
           });
           const newConv = response.data;
           // Refresh list cache
-          mutate();
+          fetchConversations();
           // Navigate to new conversation view
           router.push(`/messages?c=${newConv.id}`);
         } catch (err) {
@@ -49,18 +51,18 @@ function MessagesClient() {
       };
       getOrCreateDirectConversation();
     }
-  }, [targetUserId, router, mutate]);
+  }, [targetUserId, router, fetchConversations]);
 
   // Listen to real-time custom message events to revalidate list cache instantly
   useEffect(() => {
     const handleNewMessage = () => {
-      mutate();
+      fetchConversations();
     };
     if (typeof window !== 'undefined') {
       window.addEventListener('chat-message-received', handleNewMessage);
       return () => window.removeEventListener('chat-message-received', handleNewMessage);
     }
-  }, [mutate]);
+  }, [fetchConversations]);
 
   // Filter conversations locally based on search query
   const filteredConversations = conversationsList.filter((c) => {

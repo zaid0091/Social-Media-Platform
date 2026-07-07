@@ -9,6 +9,7 @@ import {
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import useChatSocket from '@/hooks/useChatSocket';
+import useMessages from '@/hooks/useMessages';
 
 // Common emojis for quick reaction picker
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -17,9 +18,20 @@ export default function ChatWindow({ conversationId, onGoBack }) {
   const router = useRouter();
   const { accessToken, user: currentUser } = useAuthStore();
   
-  const [messages, setMessages] = useState([]);
-  const [nextCursorUrl, setNextCursorUrl] = useState(null);
-  const [conversation, setConversation] = useState(null);
+  // Message list state and actions from Zustand store
+  const {
+    messages: storeMessagesMap,
+    nextCursors,
+    fetchMessages,
+    addMessage,
+    setMessages,
+    conversations
+  } = useMessages();
+
+  const messages = storeMessagesMap[conversationId] || [];
+  const nextCursorUrl = nextCursors[conversationId] || null;
+  const conversation = conversations.find((c) => c.id === conversationId) || null;
+
   const [loading, setLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
@@ -48,13 +60,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
   const fetchConversationDetails = async (isInitial = true) => {
     if (isInitial) setLoading(true);
     try {
-      const response = await api.get(`/messaging/conversations/${conversationId}/`);
-      setConversation(response.data.conversation);
-      
-      // Reverse messages since backend returns newest first
-      const fetchedMessages = response.data.messages?.results || [];
-      setMessages(fetchedMessages.reverse());
-      setNextCursorUrl(response.data.messages?.next || null);
+      await fetchMessages(conversationId);
     } catch (err) {
       console.error('Failed to load chat details', err);
     } finally {
@@ -78,27 +84,23 @@ export default function ChatWindow({ conversationId, onGoBack }) {
     const isMyMessage = newMsg.sender?.id === currentUser?.id || 
                         (newMsg.sender?.username && newMsg.sender?.username === currentUser?.username);
 
-    setMessages((prev) => {
-      // 1. If it's our own message, check if there's a pending optimistic message we can resolve
-      if (isMyMessage) {
-        const pendingIndex = prev.findIndex(
-          (m) => m.status === 'pending' && 
-                 m.content === newMsg.content && 
-                 (m.media_url || '') === (newMsg.media_url || '')
-        );
-        if (pendingIndex !== -1) {
-          const updated = [...prev];
-          updated[pendingIndex] = { ...newMsg, status: 'sent' }; // Replace optimistic with real
-          return updated;
-        }
+    // 1. If it's our own message, check if there's a pending optimistic message we can resolve
+    if (isMyMessage) {
+      const pendingIndex = messages.findIndex(
+        (m) => m.status === 'pending' && 
+               m.content === newMsg.content && 
+               (m.media_url || '') === (newMsg.media_url || '')
+      );
+      if (pendingIndex !== -1) {
+        const updated = [...messages];
+        updated[pendingIndex] = { ...newMsg, status: 'sent' }; // Replace optimistic with real
+        setMessages(conversationId, updated);
+        return;
       }
+    }
 
-      // 2. Prevent duplicate message additions
-      if (prev.some((m) => m.id === newMsg.id)) return prev;
-
-      // 3. Append new message to list
-      return [...prev, newMsg];
-    });
+    // 2. Prevent duplicate message additions and dispatch to store
+    addMessage(conversationId, newMsg);
 
     // Send read receipt if we are the recipient of this new incoming message
     if (!isMyMessage) {
@@ -125,14 +127,14 @@ export default function ChatWindow({ conversationId, onGoBack }) {
 
   const handleReadReceiptEvent = (readerId, username) => {
     if (readerId !== currentUser?.id) {
-      setMessages((prev) => 
-        prev.map((m) => m.sender?.id === currentUser?.id ? { ...m, is_read: true } : m)
+      setMessages(conversationId, 
+        messages.map((m) => m.sender?.id === currentUser?.id ? { ...m, is_read: true } : m)
       );
     }
   };
 
   const handleReactionEvent = (data) => {
-    setMessages((prev) => 
+    setMessages(conversationId, 
       prev.map((m) => {
         if (m.id === data.message_id) {
           let updatedReactions = m.reactions || [];

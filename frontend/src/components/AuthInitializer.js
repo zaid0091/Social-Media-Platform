@@ -15,7 +15,12 @@ export default function AuthInitializer({ children }) {
 
   // Mount session refresh
   useEffect(() => {
-    refreshSession();
+    const isAlreadyAuthenticated = useAuthStore.getState().isAuthenticated;
+    if (!isAlreadyAuthenticated) {
+      useAuthStore.setState({ isLoading: false });
+    } else {
+      refreshSession();
+    }
   }, [refreshSession]);
 
   // Fetch initial unread count when authenticated
