@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import useSWR from 'swr';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import PostCard from '@/components/posts/PostCard';
@@ -9,40 +9,29 @@ import SkeletonPostCard from '@/components/posts/SkeletonPostCard';
 import StoriesBar from '@/components/stories/StoriesBar';
 import { ArrowUp, RefreshCw, Compass, Users } from 'lucide-react';
 import Link from 'next/link';
-import useFeed from '@/hooks/useFeed';
+import useFeedQuery from '@/hooks/useFeedQuery';
+import { postKeys } from '@/utils/queryKeys';
+import FlatList from '@/components/ui/FlatList';
 
 export default function HomeFeedPage() {
   const { user: currentUser, accessToken } = useAuthStore();
-  
-  // Feed list state and actions from Zustand store
-  const {
-    posts,
-    page,
-    loading,
-    error,
-    hasNextPage,
-    newPostsAvailable,
-    setPage,
-    setNewPostsAvailable,
-    fetchFeedPage,
-    handlePostDeleted,
-    refreshFeed
-  } = useFeed();
+  const queryClient = useQueryClient();
 
+  const [newPostsAvailable, setNewPostsAvailable] = useState(false);
   const socketRef = useRef(null);
-  const observerTargetRef = useRef(null);
 
-  // Initial load
-  useEffect(() => {
-    fetchFeedPage(1, true);
-  }, [fetchFeedPage]);
+  // Fetch paginated feed using useFeedQuery
+  const {
+    data: feedData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loading,
+    error,
+    refetch
+  } = useFeedQuery();
 
-  // Next page loading trigger
-  useEffect(() => {
-    if (page > 1) {
-      fetchFeedPage(page, false);
-    }
-  }, [page, fetchFeedPage]);
+  const posts = feedData?.pages.flatMap(page => page.results) || [];
 
   // WebSocket Connection listener for real-time feed notifications
   useEffect(() => {
@@ -68,34 +57,31 @@ export default function HomeFeedPage() {
     return () => {
       if (ws) ws.close();
     };
-  }, [accessToken, currentUser, setNewPostsAvailable]);
-
-  // Intersection Observer for Infinite Scroll detecting feed bottom scroll
-  useEffect(() => {
-    const target = observerTargetRef.current;
-    if (!target || !hasNextPage || loading) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setPage((prev) => prev + 1);
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    observer.observe(target);
-    return () => {
-      if (target) observer.unobserve(target);
-    };
-  }, [hasNextPage, loading, setPage]);
+  }, [accessToken, currentUser]);
 
   const handleRefreshFeed = () => {
-    refreshFeed();
+    setNewPostsAvailable(false);
+    refetch();
   };
 
-  // Dynamic fetcher for stories
-  const { data: suggestions } = useSWR('/users/suggestions/', (url) => api.get(url).then(r => r.data));
+  const handlePostDeleted = (deletedId) => {
+    queryClient.setQueryData(postKeys.feed(), (oldData) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        pages: oldData.pages.map((page) => ({
+          ...page,
+          results: page.results.filter((p) => p.id !== deletedId)
+        }))
+      };
+    });
+  };
+
+  // Fetcher for suggestions using React Query
+  const { data: suggestions } = useQuery({
+    queryKey: ['suggestions'],
+    queryFn: () => api.get('/users/suggestions/').then(r => r.data)
+  });
 
   return (
     <div className="flex flex-col min-h-screen relative">
@@ -121,43 +107,33 @@ export default function HomeFeedPage() {
       <StoriesBar />
 
       {/* 4. Feed List area */}
-      <div className="flex flex-col flex-1 divide-y divide-zinc-200 dark:divide-zinc-800">
-        
-        {/* Render posts */}
-        {posts.map((post) => (
+      <FlatList
+        data={posts}
+        keyExtractor={(post) => post.id}
+        renderItem={({ item: post }) => (
           <PostCard 
             key={post.id} 
             post={post} 
             onDelete={handlePostDeleted} 
           />
-        ))}
-
-        {/* Loading skeletons while pages loading */}
-        {loading && (
-          <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+        )}
+        fetchNextPage={fetchNextPage}
+        hasNextPage={hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        isLoading={loading}
+        isError={!!error}
+        error={error}
+        refetch={refetch}
+        className="flex-1 divide-y divide-zinc-200 dark:divide-zinc-800"
+        ListFooterComponent={
+          <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800 w-full">
             {[1, 2].map((i) => (
               <SkeletonPostCard key={i} />
             ))}
           </div>
-        )}
-
-        {/* Error Retry Alert widget */}
-        {error && !loading && (
-          <div className="p-8 text-center flex flex-col items-center justify-center space-y-4">
-            <p className="text-zinc-500 font-semibold text-sm">{error}</p>
-            <button 
-              onClick={() => fetchFeedPage(page, false)}
-              className="px-4 py-2 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-950 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity flex items-center space-x-1.5 cursor-pointer"
-            >
-              <RefreshCw className="h-3.5 w-3.5 animate-spin-hover" />
-              <span>Retry Loading</span>
-            </button>
-          </div>
-        )}
-
-        {/* Empty state suggestions follow link */}
-        {posts.length === 0 && !loading && !error && (
-          <div className="flex flex-col items-center justify-center text-center p-12 space-y-4 my-8">
+        }
+        ListEmptyComponent={
+          <div className="flex flex-col items-center justify-center text-center p-12 space-y-4 my-8 w-full">
             <div className="h-16 w-16 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-600 rounded-full flex items-center justify-center shadow-inner">
               <Compass className="h-7 w-7" />
             </div>
@@ -210,13 +186,8 @@ export default function HomeFeedPage() {
               </div>
             </div>
           </div>
-        )}
-
-        {/* Intersection observer target marker element */}
-        {hasNextPage && !loading && (
-          <div ref={observerTargetRef} className="h-10 w-full" />
-        )}
-      </div>
+        }
+      />
     </div>
   );
 }

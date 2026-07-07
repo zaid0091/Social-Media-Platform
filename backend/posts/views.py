@@ -134,7 +134,8 @@ class UserPostListView(APIView):
                 return Response({"error": "This account is private."}, status=status.HTTP_403_FORBIDDEN)
 
         posts = Post.objects.filter(author=target_user, is_deleted=False, is_hidden=False, needs_review=False).order_by('-created_at')
-        paginator = PageNumberPagination()
+        from core.pagination import CustomCursorPagination
+        paginator = CustomCursorPagination()
         paginator.page_size = 10
         result_page = paginator.paginate_queryset(posts, request)
         serializer = PostSerializer(result_page, many=True, context={'request': request})
@@ -429,7 +430,8 @@ class CommentListCreateView(APIView):
                     author_id__in=restricted_by_author
                 )
 
-        paginator = PageNumberPagination()
+        from core.pagination import CustomCursorPagination
+        paginator = CustomCursorPagination()
         paginator.page_size = 10
         result_page = paginator.paginate_queryset(comments, request)
         serializer = CommentSerializer(result_page, many=True, context={'request': request})
@@ -516,8 +518,12 @@ class CommentRepliesView(APIView):
                     author_id__in=restricted_by_author
                 )
 
-        paginator = PageNumberPagination()
-        paginator.page_size = 10
+        from core.pagination import CustomCursorPagination
+        class CommentRepliesCursorPagination(CustomCursorPagination):
+            ordering = 'created_at'
+            page_size = 10
+
+        paginator = CommentRepliesCursorPagination()
         result_page = paginator.paginate_queryset(replies, request)
         serializer = CommentSerializer(result_page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
@@ -570,7 +576,9 @@ from rest_framework.pagination import CursorPagination
 from django.db.models import Case, When
 from .services import FeedGenerationService
 
-class ChronologicalFeedPagination(CursorPagination):
+from core.pagination import CustomCursorPagination
+
+class ChronologicalFeedPagination(CustomCursorPagination):
     page_size = 10
     ordering = '-created_at'
 
@@ -643,6 +651,7 @@ class FeedView(APIView):
 
             return Response({
                 "next": next_cursor,
+                "has_next": next_cursor is not None,
                 "results": serializer.data
             }, status=status.HTTP_200_OK)
 

@@ -107,7 +107,9 @@ const useMessagesStore = create(
         }
         
         try {
-          const url = cursorUrl || `/messaging/conversations/${conversationId}/`;
+          const url = cursorUrl 
+            ? `/messaging/conversations/${conversationId}/?cursor=${cursorUrl}` 
+            : `/messaging/conversations/${conversationId}/`;
           const res = await api.get(url);
           
           // If cursorUrl is set, we are prepending older messages, otherwise replacing

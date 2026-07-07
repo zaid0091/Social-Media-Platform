@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import useSWR from 'swr';
+import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import useUserProfile from '@/hooks/useUserProfile';
+import useUserPosts from '@/hooks/useUserPosts';
 import FollowButton from '@/components/profile/FollowButton';
 import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
 import HighlightEditModal from '@/components/stories/HighlightEditModal';
@@ -33,27 +35,18 @@ import {
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ReportModal from '@/components/moderation/ReportModal';
 
-const fetcher = (url) => api.get(url).then((res) => res.data);
-
 export default function ProfilePage() {
   const { username } = useParams();
   const router = useRouter();
   const { user: currentUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState('posts');
 
-  // 1. Fetch public profile details
-  const fetchUrl = username === 'profile' 
-    ? '/users/profile/' 
-    : `/users/profile/${username}/`;
-
+  // 1. Fetch public profile details using useUserProfile
   const { 
     data: profile, 
     error: profileError, 
-    mutate: mutateProfile 
-  } = useSWR(
-    username ? fetchUrl : null,
-    fetcher
-  );
+    refetch: mutateProfile 
+  } = useUserProfile(username);
 
   // Auto-redirect /profile to /[username] when currentUser is loaded
   useEffect(() => {
@@ -62,14 +55,13 @@ export default function ProfilePage() {
     }
   }, [username, currentUser, router]);
 
-  // 2. Fetch profile posts (only if profile is accessible)
+  // 2. Fetch profile posts using useUserPosts
   const { 
     data: postsData, 
     error: postsError 
-  } = useSWR(
-    profile?.is_accessible && profile?.id ? `/posts/user/${profile.id}/` : null,
-    fetcher
-  );
+  } = useUserPosts(profile?.id, {
+    enabled: !!(profile?.is_accessible && profile?.id)
+  });
 
   const posts = postsData?.results || [];
 
@@ -78,14 +70,15 @@ export default function ProfilePage() {
   const [editHighlightTarget, setEditHighlightTarget] = useState(null);
   const [activeHighlight, setActiveHighlight] = useState(null);
 
-  // 2b. Fetch user highlights
+  // 2b. Fetch user highlights using React Query
   const { 
     data: highlights = [], 
-    mutate: mutateHighlights 
-  } = useSWR(
-    profile?.is_accessible ? `/stories/highlights/user/${profile.username}/` : null,
-    fetcher
-  );
+    refetch: mutateHighlights 
+  } = useQuery({
+    queryKey: ['highlights', profile?.username],
+    queryFn: () => api.get(`/stories/highlights/user/${profile.username}/`).then((res) => res.data),
+    enabled: !!(profile?.is_accessible && profile?.username)
+  });
 
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);

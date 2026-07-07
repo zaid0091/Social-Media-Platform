@@ -1,22 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import useSWR from 'swr';
-import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import useStories from '@/hooks/useStories';
 import StoryCreateModal from './StoryCreateModal';
 import StoryViewer from './StoryViewer';
 import { Plus } from 'lucide-react';
-
-const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function StoriesBar() {
   const { user: currentUser } = useAuthStore();
   const [viewerIndex, setViewerIndex] = useState(null); // Index of active group to view
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Fetch active stories list grouped by author
-  const { data: storyGroups = [], mutate: mutateStories } = useSWR('/stories/', fetcher);
+  // Fetch active stories list grouped by author using React Query
+  const { data: storyGroups = [], refetch: refetchStories } = useStories();
 
   const handleOpenViewer = (index) => {
     setViewerIndex(index);
@@ -134,7 +131,7 @@ export default function StoriesBar() {
           groups={storyGroups}
           initialGroupIndex={viewerIndex}
           onClose={handleCloseViewer}
-          onStoryViewed={() => mutateStories()} // mutate and fetch viewed status checks
+          onStoryViewed={() => refetchStories()} // refetch and fetch viewed status checks
         />
       )}
 
@@ -142,7 +139,7 @@ export default function StoriesBar() {
       <StoryCreateModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        onStoryCreated={() => mutateStories()}
+        onStoryCreated={() => refetchStories()}
       />
     </div>
   );

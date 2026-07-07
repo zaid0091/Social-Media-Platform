@@ -6,6 +6,7 @@ import { Search, Mail, SquarePen, Users, ArrowLeft } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import useMessages from '@/hooks/useMessages';
+import useConversations from '@/hooks/useConversations';
 import NewConversationModal from '@/components/messaging/NewConversationModal';
 import ChatWindow from '@/components/messaging/ChatWindow';
 
@@ -18,13 +19,9 @@ function MessagesClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Use Zustand messaging store
-  const {
-    conversations: conversationsList,
-    loading: isLoading,
-    error,
-    fetchConversations
-  } = useMessages();
+  // Use React Query conversations hook
+  const { data, isLoading, refetch: fetchConversations } = useConversations();
+  const conversationsList = data?.results || data || [];
 
   // Fetch conversations list initially
   useEffect(() => {

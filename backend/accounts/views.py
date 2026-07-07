@@ -575,7 +575,8 @@ class FollowerListView(APIView):
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
         followers = Follow.objects.filter(following=target_user).order_by('-created_at')
-        paginator = PageNumberPagination()
+        from core.pagination import CustomCursorPagination
+        paginator = CustomCursorPagination()
         paginator.page_size = 20
         result_page = paginator.paginate_queryset(followers, request)
         serializer = FollowSerializer(result_page, many=True)
@@ -598,7 +599,8 @@ class FollowingListView(APIView):
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
         following = Follow.objects.filter(follower=target_user).order_by('-created_at')
-        paginator = PageNumberPagination()
+        from core.pagination import CustomCursorPagination
+        paginator = CustomCursorPagination()
         paginator.page_size = 20
         result_page = paginator.paginate_queryset(following, request)
         serializer = FollowSerializer(result_page, many=True)

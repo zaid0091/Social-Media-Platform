@@ -7,8 +7,11 @@ from rest_framework.pagination import PageNumberPagination
 from .models import Notification
 from .serializers import NotificationSerializer
 
-class NotificationPagination(PageNumberPagination):
+from core.pagination import CustomCursorPagination
+
+class NotificationPagination(CustomCursorPagination):
     page_size = 20
+    ordering = '-created_at'
 
 class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]

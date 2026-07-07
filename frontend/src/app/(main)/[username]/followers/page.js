@@ -9,44 +9,31 @@ import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import FollowButton from '@/components/profile/FollowButton';
 
-const fetcher = (url) => api.get(url).then((res) => res.data);
+import useUserProfile from '@/hooks/useUserProfile';
+import { useUserFollowersQuery } from '@/hooks/useFollowersFollowingQuery';
+import FlatList from '@/components/ui/FlatList';
 
 export default function FollowersPage() {
   const { username } = useParams();
   const router = useRouter();
   const { user: currentUser } = useAuthStore();
 
-  const [followers, setFollowers] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasNext, setHasNext] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-
   // 1. Fetch public profile to get user ID
-  const { data: profile, error: profileError, isLoading: loadingProfile } = useSWR(
-    username ? `/users/profile/${username}/` : null,
-    fetcher
-  );
+  const { data: profile, error: profileError, isLoading: loadingProfile } = useUserProfile(username);
 
-  // 2. Fetch followers list using SWR
+  // 2. Fetch followers list using useUserFollowersQuery
   const profileId = profile?.id;
-  const { data: followersData, error: followersError, isLoading: loadingFollowers, mutate } = useSWR(
-    profileId ? `/users/${profileId}/followers/?page=${page}` : null,
-    fetcher
-  );
+  const { 
+    data: followersData, 
+    error: followersError, 
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loadingFollowers, 
+    refetch 
+  } = useUserFollowersQuery(profileId);
 
-  useEffect(() => {
-    if (followersData) {
-      const results = followersData.results || [];
-      setFollowers((prev) => page === 1 ? results : [...prev, ...results]);
-      setHasNext(!!followersData.next);
-    }
-  }, [followersData, page]);
-
-  const handleLoadMore = () => {
-    if (hasNext && !loadingMore) {
-      setPage((p) => p + 1);
-    }
-  };
+  const followers = followersData?.pages.flatMap(page => page.results) || [];
 
   if (profileError || followersError) {
     return (
@@ -108,21 +95,17 @@ export default function FollowersPage() {
               </div>
             ))}
           </div>
-        ) : followers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm font-bold text-zinc-450">No followers yet</p>
-            <p className="text-xs text-zinc-400 mt-1">When people follow this profile, they will appear here</p>
-          </div>
         ) : (
-          <div className="space-y-2 text-left">
-            {followers.map((item) => {
+          <FlatList
+            data={followers}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
               const u = item.follower;
               if (!u) return null;
 
               return (
                 <div
-                  key={item.id}
-                  className="flex items-center justify-between p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/80 rounded-2.5xl shadow-sm"
+                  className="flex items-center justify-between p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/80 rounded-2.5xl shadow-sm text-left mb-2"
                 >
                   <Link href={`/${u.username}`} className="flex items-center space-x-3.5 min-w-0 mr-4">
                     {u.profile_picture ? (
@@ -155,29 +138,27 @@ export default function FollowersPage() {
                       initialFollowRequestPending={u.follow_request_pending}
                       isPrivate={u.is_private}
                       onStateChange={() => {
-                        // Dynamically update followers view cache
-                        mutate();
+                        refetch();
                       }}
                     />
                   )}
                 </div>
               );
-            })}
-
-            {hasNext && (
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="w-full text-center py-2.5 bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer mt-4"
-              >
-                {loadingMore ? (
-                  <div className="h-4 w-4 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" />
-                ) : (
-                  <span>Load More Followers</span>
-                )}
-              </button>
-            )}
-          </div>
+            }}
+            fetchNextPage={fetchNextPage}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            isLoading={loadingFollowers}
+            isError={!!followersError}
+            error={followersError}
+            refetch={refetch}
+            ListEmptyComponent={
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <p className="text-sm font-bold text-zinc-455">No followers yet</p>
+                <p className="text-xs text-zinc-400 mt-1">When people follow this profile, they will appear here</p>
+              </div>
+            }
+          />
         )}
 
       </div>

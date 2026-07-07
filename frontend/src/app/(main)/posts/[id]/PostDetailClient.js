@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import useSWR from 'swr';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -20,8 +20,9 @@ import CommentItem from '@/components/posts/CommentItem';
 import CommentInput from '@/components/posts/CommentInput';
 import RepostCard from '@/components/posts/RepostCard';
 import { parseContent } from '@/utils/parseContent';
-
-const fetcher = (url) => api.get(url).then((res) => res.data);
+import usePost from '@/hooks/usePost';
+import useCommentsQuery from '@/hooks/useCommentsQuery';
+import FlatList from '@/components/ui/FlatList';
 
 export default function PostDetailClient({ id }) {
   const router = useRouter();
@@ -32,11 +33,7 @@ export default function PostDetailClient({ id }) {
   const [submitting, setSubmitting] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null); // { commentId, username }
 
-  // Comments lists states
-  const [comments, setComments] = useState([]);
-  const [commentsPage, setCommentsPage] = useState(1);
-  const [hasNextComments, setHasNextComments] = useState(false);
-  const [loadingComments, setLoadingComments] = useState(false);
+  const queryClient = useQueryClient();
 
   // Optimistic Post Like states
   const [isLiked, setIsLiked] = useState(false);
@@ -47,14 +44,32 @@ export default function PostDetailClient({ id }) {
   // 1. Fetch Post Detail
   const { 
     data: post, 
-    mutate: mutatePost 
-  } = useSWR(id ? `/posts/${id}/` : null, fetcher);
+    refetch: mutatePost 
+  } = usePost(id);
 
   // 2. Fetch Likers list details
   const { 
     data: likersData 
-  } = useSWR(id ? `/posts/${id}/likers/` : null, fetcher);
+  } = useQuery({
+    queryKey: ['posts', id, 'likers'],
+    queryFn: () => api.get(`/posts/${id}/likers/`).then((res) => res.data),
+    enabled: !!id,
+  });
   const likers = likersData?.results || [];
+
+  // Fetch comments page-by-page using useCommentsQuery
+  const {
+    data: commentsData,
+    fetchNextPage,
+    hasNextPage: hasNextComments,
+    isFetchingNextPage,
+    isLoading: loadingComments,
+    isError: isCommentsError,
+    error: commentsError,
+    refetch: refetchComments
+  } = useCommentsQuery(id);
+
+  const comments = commentsData?.pages.flatMap((page) => page.results) || [];
 
   // Sync post properties on load
   useEffect(() => {
@@ -64,32 +79,6 @@ export default function PostDetailClient({ id }) {
       setIsBookmarked(post.is_bookmarked);
     }
   }, [post]);
-
-  // Fetch comments page-by-page
-  const fetchComments = async (pageNumber, isRefresh = false) => {
-    if (!id) return;
-    setLoadingComments(true);
-    try {
-      const res = await api.get(`/posts/${id}/comments/?page=${pageNumber}`);
-      const results = res.data.results || [];
-      setComments((prev) => isRefresh ? results : [...prev, ...results]);
-      setHasNextComments(!!res.data.next);
-    } catch (err) {
-    } finally {
-      setLoadingComments(false);
-    }
-  };
-
-  useEffect(() => {
-    setCommentsPage(1);
-    fetchComments(1, true);
-  }, [id]);
-
-  const handleLoadMoreComments = () => {
-    const nextPage = commentsPage + 1;
-    setCommentsPage(nextPage);
-    fetchComments(nextPage, false);
-  };
 
   const handleLikeToggle = async () => {
     const wasLiked = isLiked;
@@ -122,72 +111,49 @@ export default function PostDetailClient({ id }) {
     }
   };
 
-  // Submit new top-level comment or reply with Optimistic rendering
+  // Submit new top-level comment or reply
   const handleCommentSubmit = async (text) => {
     if (submitting) return;
     setSubmitting(true);
 
-    const tempId = 'temp-' + Date.now();
-    const tempComment = {
-      id: tempId,
-      content: replyTarget ? `@${replyTarget.username} ${text}` : text,
-      author: currentUser || { username: 'you' },
-      created_at: new Date().toISOString(),
-      like_count: 0,
-      reply_count: 0,
-      is_liked: false,
-      parent: replyTarget ? replyTarget.commentId : null
-    };
-
-    // Optimistic UI updates
-    if (!tempComment.parent) {
-      // Prepend to top-level comments list
-      setComments((prev) => [tempComment, ...prev]);
-    } else {
-      // Update parent comment reply counter in the list
-      setComments((prev) => prev.map(c => 
-        c.id === tempComment.parent ? { ...c, reply_count: c.reply_count + 1 } : c
-      ));
-    }
-
     try {
       const payload = {
         post: post.id,
-        content: tempComment.content,
-        parent: tempComment.parent
+        content: replyTarget ? `@${replyTarget.username} ${text}` : text,
+        parent: replyTarget ? replyTarget.commentId : null
       };
       
       await api.post(`/posts/${post.id}/comments/`, payload);
       setCommentText('');
       setReplyTarget(null);
       
-      // Refresh backend list
-      fetchComments(1, true);
+      queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });
       mutatePost();
     } catch (err) {
-      // Revert optimistic updates on error
-      if (!tempComment.parent) {
-        setComments((prev) => prev.filter(c => c.id !== tempId));
-      } else {
-        setComments((prev) => prev.map(c => 
-          c.id === tempComment.parent ? { ...c, reply_count: Math.max(0, c.reply_count - 1) } : c
-        ));
-      }
+      console.error('Failed to submit comment', err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCommentDelete = (deletedId) => {
-    setComments((prev) => prev.filter(c => c.id !== deletedId));
-    mutatePost();
+  const handleCommentDelete = async (deletedId) => {
+    try {
+      await api.delete(`/posts/comments/${deletedId}/delete/`);
+      queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });
+      mutatePost();
+    } catch (err) {
+      console.error('Failed to delete comment', err);
+    }
   };
 
-  const handleCommentEdit = (editedId, newContent) => {
-    setComments((prev) => prev.map(c => 
-      c.id === editedId ? { ...c, content: newContent } : c
-    ));
-    mutatePost();
+  const handleCommentEdit = async (editedId, newContent) => {
+    try {
+      await api.patch(`/posts/comments/${editedId}/`, { content: newContent });
+      queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });
+      mutatePost();
+    } catch (err) {
+      console.error('Failed to edit comment', err);
+    }
   };
 
   const handleReplyClick = (commentId, username) => {
@@ -292,9 +258,11 @@ export default function PostDetailClient({ id }) {
               </div>
             </div>
 
-            {/* Render comments list */}
-            <div className="space-y-4">
-              {comments.map((comment) => (
+            {/* Render comments list using FlatList */}
+            <FlatList
+              data={comments}
+              keyExtractor={(comment) => comment.id}
+              renderItem={({ item: comment }) => (
                 <CommentItem 
                   key={comment.id}
                   comment={comment}
@@ -302,30 +270,21 @@ export default function PostDetailClient({ id }) {
                   onDelete={handleCommentDelete}
                   onEdit={handleCommentEdit}
                 />
-              ))}
-
-              {/* Load More Pagination controls */}
-              {hasNextComments && (
-                <div className="pt-2 text-center">
-                  <button
-                    onClick={handleLoadMoreComments}
-                    disabled={loadingComments}
-                    className="inline-flex items-center space-x-1 px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-full text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-350 bg-zinc-50/50 dark:bg-zinc-950/20 hover:bg-zinc-100 transition-colors cursor-pointer"
-                  >
-                    {loadingComments ? (
-                      <div className="h-3 w-3 rounded-full border border-zinc-300 border-t-primary animate-spin" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                    <span>Load more comments</span>
-                  </button>
-                </div>
               )}
-
-              {comments.length === 0 && !loadingComments && (
-                <p className="text-center py-6 text-xs text-zinc-400 font-semibold select-none">No comments yet. Write the first comment!</p>
-              )}
-            </div>
+              fetchNextPage={fetchNextPage}
+              hasNextPage={hasNextComments}
+              isFetchingNextPage={isFetchingNextPage}
+              isLoading={loadingComments}
+              isError={isCommentsError}
+              error={commentsError}
+              refetch={refetchComments}
+              className="space-y-4"
+              ListEmptyComponent={
+                <p className="text-center py-6 text-xs text-zinc-400 font-semibold select-none">
+                  No comments yet. Write the first comment!
+                </p>
+              }
+            />
           </div>
 
           {/* Action Row panel */}

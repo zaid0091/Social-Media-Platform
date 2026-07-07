@@ -1,22 +1,22 @@
 'use client';
 
-import useSWR from 'swr';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import PrefetchLink from '@/components/navigation/PrefetchLink';
 import { UserPlus, UserCheck, Sparkles } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import FollowButton from '@/components/profile/FollowButton';
 
-const fetcher = (url) => api.get(url).then((res) => res.data);
-
 export default function SuggestedUsersWidget() {
   const { user: currentUser } = useAuthStore();
 
-  // Query suggestions from upgraded backend endpoint
-  const { data: suggestions = [], isLoading, mutate } = useSWR(
-    currentUser ? '/users/suggestions/' : null,
-    fetcher
-  );
+  // Query suggestions using React Query
+  const { data: suggestions = [], isLoading, refetch } = useQuery({
+    queryKey: ['suggestions'],
+    queryFn: () => api.get('/users/suggestions/').then(r => r.data),
+    enabled: !!currentUser
+  });
 
   if (isLoading && suggestions.length === 0) {
     return (
@@ -66,8 +66,10 @@ export default function SuggestedUsersWidget() {
       <div className="flex flex-col space-y-3.5">
         {displaySuggestions.map((u) => (
           <div key={u.id} className="flex items-start justify-between space-x-3">
-            <Link 
+            <PrefetchLink 
               href={`/${u.username}`} 
+              type="profile"
+              entityId={u.username}
               className="flex items-start space-x-2.5 min-w-0 group"
             >
               {u.profile_picture ? (
@@ -100,7 +102,7 @@ export default function SuggestedUsersWidget() {
                   </p>
                 )}
               </div>
-            </Link>
+            </PrefetchLink>
 
             <FollowButton
               userId={u.id}
@@ -110,8 +112,8 @@ export default function SuggestedUsersWidget() {
               isPrivate={u.is_private}
               className="!px-2.5 !py-1 text-[10px] shrink-0 mt-0.5"
               onStateChange={() => {
-                // Mutate SWR suggestions on follow status update to refresh list
-                mutate();
+                // Refetch suggestions on follow status update to refresh list
+                refetch();
               }}
             />
           </div>

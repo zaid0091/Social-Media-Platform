@@ -16,7 +16,9 @@ from core.utils.cloudinary import upload_file_to_cloudinary
 
 User = get_user_model()
 
-class ConversationMessagesCursorPagination(CursorPagination):
+from core.pagination import CustomCursorPagination
+
+class ConversationMessagesCursorPagination(CustomCursorPagination):
     page_size = 20
     ordering = '-created_at'
 
@@ -51,11 +53,18 @@ class ConversationDetailView(generics.RetrieveAPIView):
         message_serializer = MessageSerializer(page, many=True, context={'request': request})
         conv_serializer = self.get_serializer(conversation)
 
+        next_url = paginator.get_next_link()
+        next_cursor = None
+        if next_url:
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(next_url)
+            next_cursor = parse_qs(parsed.query).get('cursor', [None])[0]
+
         response_data = {
             "conversation": conv_serializer.data,
             "messages": {
-                "next": paginator.get_next_link(),
-                "previous": paginator.get_previous_link(),
+                "next": next_cursor,
+                "has_next": next_cursor is not None,
                 "results": message_serializer.data
             }
         }
