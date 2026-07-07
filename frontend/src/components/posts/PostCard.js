@@ -25,7 +25,12 @@ import ReportModal from '../moderation/ReportModal';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import CarouselComponent from './CarouselComponent';
-import VideoPlayer from './VideoPlayer';
+import dynamic from 'next/dynamic';
+
+const VideoPlayer = dynamic(() => import('./VideoPlayer'), {
+  ssr: false,
+  loading: () => <div className="aspect-square bg-zinc-950 flex items-center justify-center text-zinc-500 font-semibold">Loading player...</div>
+});
 import BookmarkActionMenu from './BookmarkActionMenu';
 import RepostCard from './RepostCard';
 import QuotePostModal from './QuotePostModal';

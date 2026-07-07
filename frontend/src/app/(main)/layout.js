@@ -10,7 +10,11 @@ import useAuthStore from '@/store/useAuthStore';
 import LeftSidebar from '@/components/navigation/LeftSidebar';
 import BottomNav from '@/components/navigation/BottomNav';
 import CreatePostFAB from '@/components/navigation/CreatePostFAB';
-import PostCreateModal from '@/components/posts/PostCreateModal';
+import dynamic from 'next/dynamic';
+
+const PostCreateModal = dynamic(() => import('@/components/posts/PostCreateModal'), {
+  ssr: false
+});
 import SuggestedUsersWidget from '@/components/profile/SuggestedUsersWidget';
 import Sparkline from '@/components/posts/Sparkline';
 

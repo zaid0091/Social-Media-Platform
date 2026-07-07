@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
+import dynamic from 'next/dynamic';
 import { 
   X, 
   Image as ImageIcon, 
@@ -21,22 +20,10 @@ import api from '@/services/api';
 import useUIStore from '@/store/useUIStore';
 import MentionDropdown from './MentionDropdown';
 
-// Helper to center the initial crop
-function centerAspectCrop(mediaWidth, mediaHeight, aspect) {
-  return centerCrop(
-    makeAspectCrop(
-      {
-        unit: '%',
-        width: 90,
-      },
-      aspect,
-      mediaWidth,
-      mediaHeight
-    ),
-    mediaWidth,
-    mediaHeight
-  );
-}
+const ImageCropper = dynamic(() => import('./ImageCropper'), {
+  ssr: false,
+  loading: () => <div className="text-zinc-500 dark:text-zinc-400 font-semibold p-8 text-center">Loading image editor...</div>
+});
 
 export default function PostCreateModal() {
   const { isPostCreateOpen, closePostCreate } = useUIStore();
@@ -47,9 +34,6 @@ export default function PostCreateModal() {
   
   // Cropper states
   const [croppingIndex, setCroppingIndex] = useState(null); // Index of file being cropped
-  const [crop, setCrop] = useState(null);
-  const [completedCrop, setCompletedCrop] = useState(null);
-  const cropperImgRef = useRef(null);
 
   // Details states
   const [content, setContent] = useState('');
@@ -175,58 +159,24 @@ export default function PostCreateModal() {
     });
   };
 
-  // Canvas Image Cropping execution
-  const onImageLoad = (e) => {
-    const { width, height } = e.currentTarget;
-    const initialCrop = centerAspectCrop(width, height, 1); // 1:1 square crop default
-    setCrop(initialCrop);
-    cropperImgRef.current = e.currentTarget;
-  };
-
-  const applyCrop = async () => {
-    if (!completedCrop || !cropperImgRef.current || croppingIndex === null) return;
-    const image = cropperImgRef.current;
+  const applyCrop = (blob) => {
+    if (!blob || croppingIndex === null) return;
     const targetFile = selectedFiles[croppingIndex];
-
-    const canvas = document.createElement('canvas');
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
     
-    canvas.width = completedCrop.width;
-    canvas.height = completedCrop.height;
-    const ctx = canvas.getContext('2d');
+    const croppedFile = new File([blob], targetFile.file.name || 'cropped.jpg', { type: 'image/jpeg' });
+    
+    setSelectedFiles((prev) => {
+      const copy = [...prev];
+      URL.revokeObjectURL(copy[croppingIndex].preview);
+      copy[croppingIndex] = {
+        ...copy[croppingIndex],
+        file: croppedFile,
+        preview: URL.createObjectURL(croppedFile)
+      };
+      return copy;
+    });
 
-    ctx.drawImage(
-      image,
-      completedCrop.x * scaleX,
-      completedCrop.y * scaleY,
-      completedCrop.width * scaleX,
-      completedCrop.height * scaleY,
-      0,
-      0,
-      completedCrop.width,
-      completedCrop.height
-    );
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      blob.name = targetFile.file.name;
-      const croppedFile = new File([blob], targetFile.file.name, { type: 'image/jpeg' });
-      
-      setSelectedFiles((prev) => {
-        const copy = [...prev];
-        URL.revokeObjectURL(copy[croppingIndex].preview);
-        copy[croppingIndex] = {
-          ...copy[croppingIndex],
-          file: croppedFile,
-          preview: URL.createObjectURL(croppedFile)
-        };
-        return copy;
-      });
-
-      setCroppingIndex(null);
-      setCompletedCrop(null);
-    }, 'image/jpeg');
+    setCroppingIndex(null);
   };
 
   // Text details content watcher for hashtags suggestions and mentions
@@ -411,38 +361,12 @@ export default function PostCreateModal() {
             /* STEP 2: Reordering and Canvas crop adjustments */
             <div className="space-y-6">
               {croppingIndex !== null ? (
-                /* Crop Modal view mode overlay */
-                <div className="space-y-4">
-                  <div className="max-h-[50vh] overflow-hidden flex items-center justify-center bg-black rounded-xl relative">
-                    <ReactCrop 
-                      crop={crop} 
-                      onChange={(c) => setCrop(c)}
-                      onComplete={(c) => setCompletedCrop(c)}
-                      aspect={1}
-                    >
-                      <img 
-                        src={selectedFiles[croppingIndex].preview} 
-                        alt="To Crop"
-                        onLoad={onImageLoad}
-                        className="max-h-[45vh] object-contain"
-                      />
-                    </ReactCrop>
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <button 
-                      onClick={() => setCroppingIndex(null)}
-                      className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-semibold cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={applyCrop}
-                      className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-bold cursor-pointer"
-                    >
-                      Apply Crop
-                    </button>
-                  </div>
-                </div>
+                /* Dynamic ImageCropper chunk */
+                <ImageCropper
+                  src={selectedFiles[croppingIndex].preview}
+                  onCancel={() => setCroppingIndex(null)}
+                  onApply={applyCrop}
+                />
               ) : (
                 /* Thumbnails grid containing order actions */
                 <div className="grid grid-cols-2 gap-4">

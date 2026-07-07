@@ -2,7 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Smile, X, Send } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import MentionDropdown from './MentionDropdown';
+
+const EmojiPicker = dynamic(() => import('@/components/ui/EmojiPicker'), {
+  ssr: false,
+  loading: () => <div className="text-xs text-zinc-450 p-2">Loading emojis...</div>
+});
 
 export default function CommentInput({
   user,
@@ -93,8 +99,6 @@ export default function CommentInput({
     setMentionQuery('');
   };
 
-  const emojis = ['😃', '😂', '🤣', '😊', '😍', '🥰', '😘', '😜', '🤔', '👍', '👎', '🔥', '👏', '🎉', '❤️', '💔'];
-
   return (
     <div className="border-t border-zinc-150 dark:border-zinc-800 p-4 relative bg-white dark:bg-zinc-900 shrink-0 select-none">
       {/* Autocomplete mention dropdown absolute overlay */}
@@ -138,19 +142,11 @@ export default function CommentInput({
 
       {/* 2. Emoji Popover panel */}
       {showEmojiPicker && (
-        <div 
-          ref={emojiRef} 
-          className="absolute bottom-[72px] left-4 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-3 grid grid-cols-8 gap-2 z-30 animate-in fade-in slide-in-from-bottom-2 duration-200"
-        >
-          {emojis.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => handleAddEmoji(emoji)}
-              className="h-8 w-8 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl flex items-center justify-center text-lg cursor-pointer transition-colors"
-            >
-              {emoji}
-            </button>
-          ))}
+        <div ref={emojiRef} className="absolute bottom-[72px] left-4 z-30">
+          <EmojiPicker 
+            onSelect={handleAddEmoji} 
+            layout="grid"
+          />
         </div>
       )}
 

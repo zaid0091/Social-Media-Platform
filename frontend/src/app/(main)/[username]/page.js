@@ -11,7 +11,12 @@ import useUserPosts from '@/hooks/useUserPosts';
 import FollowButton from '@/components/profile/FollowButton';
 import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
 import HighlightEditModal from '@/components/stories/HighlightEditModal';
-import StoryViewer from '@/components/stories/StoryViewer';
+import dynamic from 'next/dynamic';
+
+const StoryViewer = dynamic(() => import('@/components/stories/StoryViewer'), {
+  ssr: false,
+  loading: () => <div className="fixed inset-0 z-55 bg-black/90 flex items-center justify-center text-white font-semibold">Loading highlight...</div>
+});
 import LazyViewportImage from '@/components/ui/LazyViewportImage';
 import { 
   Lock, 

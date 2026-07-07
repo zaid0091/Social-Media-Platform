@@ -1,5 +1,19 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+let withBundleAnalyzer;
+try {
+  // Try importing the bundle analyzer wrapper creator
+  withBundleAnalyzer = require('@next/bundle-analyzer');
+} catch (err) {
+  // Fallback signature match: returns a function that returns the configuration object directly
+  withBundleAnalyzer = () => (config) => config;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Silences custom Webpack configuration conflicts under Turbopack
+  turbopack: {},
   images: {
     remotePatterns: [
       {
@@ -26,6 +40,21 @@ const nextConfig = {
       },
     ];
   },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Split node_modules vendor libraries into a separate cache chunk group
+      config.optimization.splitChunks.cacheGroups.vendors = {
+        test: /[\\/]node_modules[\\/]/,
+        name: 'vendors',
+        chunks: 'all',
+      };
+    }
+    return config;
+  }
 };
 
-export default nextConfig;
+const analyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
+
+export default analyzer(nextConfig);

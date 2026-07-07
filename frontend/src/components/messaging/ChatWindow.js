@@ -6,7 +6,13 @@ import {
   ArrowLeft, Phone, Video, Info, Send, Smile, Paperclip, 
   MoreVertical, Reply, Trash2, CheckCheck, Check, SmilePlus, X
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import api from '@/services/api';
+
+const EmojiPicker = dynamic(() => import('@/components/ui/EmojiPicker'), {
+  ssr: false,
+  loading: () => <div className="text-xs text-zinc-450 p-2">Loading...</div>
+});
 import useAuthStore from '@/store/useAuthStore';
 import useChatSocket from '@/hooks/useChatSocket';
 import useMessages from '@/hooks/useMessages';
@@ -728,20 +734,11 @@ export default function ChatWindow({ conversationId, onGoBack }) {
 
               {/* Emoji popover bar */}
               {showEmojiPicker && (
-                <div className="absolute right-0 bottom-14 flex items-center bg-zinc-950 border border-zinc-850 px-3 py-2 rounded-full shadow-2xl space-x-2 z-40 animate-badge-pop">
-                  {QUICK_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => {
-                        setTextInput((prev) => prev + emoji);
-                      }}
-                      className="hover:scale-125 transition duration-100 text-sm cursor-pointer"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+                <EmojiPicker 
+                  onSelect={(emoji) => setTextInput((prev) => prev + emoji)}
+                  layout="row"
+                  className="absolute right-0 bottom-14 animate-badge-pop"
+                />
               )}
             </div>
 
