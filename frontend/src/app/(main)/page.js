@@ -12,6 +12,7 @@ import Link from 'next/link';
 import useFeedQuery from '@/hooks/useFeedQuery';
 import { postKeys } from '@/utils/queryKeys';
 import FlatList from '@/components/ui/FlatList';
+import OptimizedImage from '@/components/ui/OptimizedImage';
 
 export default function HomeFeedPage() {
   const { user: currentUser, accessToken } = useAuthStore();
@@ -157,7 +158,13 @@ export default function HomeFeedPage() {
                     <div key={item.id} className="flex items-center justify-between text-left">
                       <Link href={`/${item.username}`} className="flex items-center space-x-3 min-w-0 group">
                         {item.profile_picture ? (
-                          <img src={item.profile_picture} alt={item.username} className="h-8 w-8 rounded-full object-cover shrink-0" />
+                          <OptimizedImage 
+                            src={item.profile_picture} 
+                            alt={item.username} 
+                            width={32}
+                            height={32}
+                            className="rounded-full object-cover shrink-0" 
+                          />
                         ) : (
                           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0">
                             {item.username?.charAt(0).toUpperCase()}

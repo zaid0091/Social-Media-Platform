@@ -30,6 +30,7 @@ import BookmarkActionMenu from './BookmarkActionMenu';
 import RepostCard from './RepostCard';
 import QuotePostModal from './QuotePostModal';
 import ShareModal from './ShareModal';
+import OptimizedImage from '../ui/OptimizedImage';
 
 // Helper to format timestamps to relative time
 const getRelativeTime = (dateString) => {
@@ -276,10 +277,12 @@ export default function PostCard({ post, onDelete }) {
         <div className="flex items-center space-x-3">
           <Link href={`/${post.author.username}`} className="shrink-0 block select-none">
             {post.author.profile_picture ? (
-              <img 
+              <OptimizedImage 
                 src={post.author.profile_picture} 
                 alt={post.author.username} 
-                className="h-10 w-10 rounded-full object-cover border border-zinc-200/50 dark:border-zinc-800/50"
+                width={40}
+                height={40}
+                className="rounded-full object-cover border border-zinc-200/50 dark:border-zinc-800/50 shrink-0"
               />
             ) : (
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-sm">
@@ -461,10 +464,12 @@ export default function PostCard({ post, onDelete }) {
               className="w-full relative aspect-square bg-zinc-955 flex items-center justify-center cursor-pointer"
               onClick={() => router.push(`/posts/${post.id}`)}
             >
-              <img 
+              <OptimizedImage 
                 src={post.media[0].media_url} 
                 alt="Post Attachment" 
-                className="max-w-full max-h-full object-contain"
+                blurHash={post.media[0].blur_hash}
+                fill
+                className="object-contain"
               />
             </div>
           )}

@@ -10,7 +10,7 @@ User = get_user_model()
 class PostMediaSerializer(serializers.ModelSerializer):
     class Meta:
         model = PostMedia
-        fields = ('id', 'media_url', 'media_type', 'order', 'thumbnail_url', 'duration')
+        fields = ('id', 'media_url', 'media_type', 'order', 'thumbnail_url', 'duration', 'blur_hash')
 
 class RepostedPostSerializer(serializers.ModelSerializer):
     author = UserFollowDetailsSerializer(read_only=True)
@@ -124,7 +124,8 @@ class PostCreateSerializer(serializers.ModelSerializer):
                 media_type=item.get('media_type', 'image'),
                 order=item.get('order', index),
                 thumbnail_url=item.get('thumbnail_url'),
-                duration=item.get('duration')
+                duration=item.get('duration'),
+                blur_hash=item.get('blur_hash')
             )
         return post
 
@@ -156,7 +157,8 @@ class PostCreateSerializer(serializers.ModelSerializer):
                     media_type=item.get('media_type', 'image'),
                     order=item.get('order', index),
                     thumbnail_url=item.get('thumbnail_url'),
-                    duration=item.get('duration')
+                    duration=item.get('duration'),
+                    blur_hash=item.get('blur_hash')
                 )
         return post
 

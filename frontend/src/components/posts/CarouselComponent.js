@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import OptimizedImage from '../ui/OptimizedImage';
 
 export default function CarouselComponent({ media = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -70,12 +71,15 @@ export default function CarouselComponent({ media = [] }) {
         {media.map((item, index) => (
           <div 
             key={item.id || index}
-            className="w-full h-full shrink-0 flex items-center justify-center bg-zinc-950"
+            className="w-full h-full shrink-0 flex items-center justify-center bg-zinc-950 relative"
           >
-            <img 
+            <OptimizedImage 
               src={item.media_url} 
               alt={`Slide ${index + 1}`}
-              className="max-w-full max-h-full object-contain"
+              fill
+              priority={index === currentIndex}
+              blurHash={item.blur_hash}
+              className="object-contain"
               draggable="false"
             />
           </div>

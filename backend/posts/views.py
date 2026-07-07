@@ -193,7 +193,8 @@ class PostMediaUploadView(APIView):
                     'media_url': result['secure_url'],
                     'media_type': result['resource_type'],
                     'public_id': result['public_id'],
-                    'thumbnail_url': result['thumbnail_url']
+                    'thumbnail_url': result['thumbnail_url'],
+                    'blur_hash': result.get('blur_hash')
                 })
             except Exception as e:
                 return Response({"error": f"Upload failed for {f.name}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

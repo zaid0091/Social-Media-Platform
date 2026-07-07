@@ -12,6 +12,7 @@ import FollowButton from '@/components/profile/FollowButton';
 import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
 import HighlightEditModal from '@/components/stories/HighlightEditModal';
 import StoryViewer from '@/components/stories/StoryViewer';
+import LazyViewportImage from '@/components/ui/LazyViewportImage';
 import { 
   Lock, 
   MapPin, 
@@ -547,10 +548,10 @@ export default function ProfilePage() {
                     onClick={() => router.push(`/posts/${post.id}`)}
                   >
                     {hasMedia ? (
-                      <img 
+                      <LazyViewportImage 
                         src={displayMedia[0].media_url} 
                         alt="Post Thumbnail" 
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        blurHash={displayMedia[0].blur_hash}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center p-3 bg-gradient-to-br from-zinc-50 to-zinc-150 dark:from-zinc-900 dark:to-zinc-850">

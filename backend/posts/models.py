@@ -59,6 +59,7 @@ class PostMedia(models.Model):
     order = models.PositiveIntegerField(default=0)
     thumbnail_url = models.URLField(blank=True, null=True)
     duration = models.DecimalField(max_digits=6, decimal_places=2, blank=True, null=True) # in seconds for video
+    blur_hash = models.TextField(blank=True, null=True)
 
     class Meta:
         ordering = ['order']

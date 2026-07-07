@@ -7,6 +7,7 @@ import { UserPlus, UserCheck, Sparkles } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import FollowButton from '@/components/profile/FollowButton';
+import OptimizedImage from '@/components/ui/OptimizedImage';
 
 export default function SuggestedUsersWidget() {
   const { user: currentUser } = useAuthStore();
@@ -73,10 +74,12 @@ export default function SuggestedUsersWidget() {
               className="flex items-start space-x-2.5 min-w-0 group"
             >
               {u.profile_picture ? (
-                <img
+                <OptimizedImage
                   src={u.profile_picture}
                   alt={u.username}
-                  className="h-8.5 w-8.5 rounded-full object-cover shrink-0 border border-zinc-100 dark:border-zinc-800 mt-0.5"
+                  width={34}
+                  height={34}
+                  className="rounded-full object-cover shrink-0 border border-zinc-100 dark:border-zinc-800 mt-0.5"
                 />
               ) : (
                 <div className="h-8.5 w-8.5 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white text-xs shrink-0 mt-0.5">
