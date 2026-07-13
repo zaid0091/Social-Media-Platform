@@ -253,7 +253,9 @@ class UserProfileView(APIView):
 
     def get(self, request, *args, **kwargs):
         serializer = UserSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        response = Response(serializer.data, status=status.HTTP_200_OK)
+        response["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+        return response
 
     def patch(self, request, *args, **kwargs):
         from django.core.files.uploadedfile import UploadedFile
@@ -331,7 +333,16 @@ class PublicProfileView(APIView):
 
         is_accessible = (not target_user.is_private or is_self or is_following) and not has_blocked_target
 
-        serializer_data = UserSerializer(target_user).data
+        # Cache user profile base serialization for 10 minutes
+        from django.core.cache import cache
+        cache_key = f"user_profile_data:{target_user.username.lower()}"
+        base_data = cache.get_or_set(
+            cache_key,
+            lambda: UserSerializer(target_user).data,
+            timeout=600  # 10 minutes
+        )
+        serializer_data = dict(base_data)
+
         serializer_data['is_following'] = is_following
         serializer_data['is_self'] = is_self
         serializer_data['is_accessible'] = is_accessible
@@ -345,7 +356,9 @@ class PublicProfileView(APIView):
             for field in sensitive_fields:
                 serializer_data[field] = None
 
-        return Response(serializer_data, status=status.HTTP_200_OK)
+        response = Response(serializer_data, status=status.HTTP_200_OK)
+        response["Cache-Control"] = "public, max-age=10, stale-while-revalidate=120"
+        return response
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]

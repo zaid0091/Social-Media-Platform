@@ -33,3 +33,15 @@ def decrement_follow_counters(sender, instance, **kwargs):
         following.follower_count = F('follower_count') - 1
         following.save(update_fields=['follower_count'])
         following.refresh_from_db()
+
+
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+
+User = get_user_model()
+
+@receiver(post_save, sender=User)
+def invalidate_user_profile_cache(sender, instance, **kwargs):
+    cache_key = f"user_profile_data:{instance.username.lower()}"
+    cache.delete(cache_key)
+

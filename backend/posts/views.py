@@ -590,71 +590,101 @@ class FeedView(APIView):
         feed_type = request.query_params.get('feed_type', 'ranked').lower()
         refresh = request.query_params.get('refresh', '').lower() == 'true'
 
-        if feed_type == 'chronological':
-            # 1. Get followed users
-            followed_ids = list(Follow.objects.filter(follower=request.user).values_list('following_id', flat=True))
-            
-            # 2. Get blocked users
-            blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
-            blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
-            all_blocked = set(list(blocked_users) + list(blockers))
-
-            # 3. Retrieve posts
-            posts = Post.objects.filter(
-                author_id__in=followed_ids,
-                is_deleted=False
-            ).exclude(
-                author_id__in=all_blocked
-            ).exclude(
-                privacy='private'
-            ).order_by('-created_at')
-
-            paginator = ChronologicalFeedPagination()
-            result_page = paginator.paginate_queryset(posts, request)
-            serializer = PostSerializer(result_page, many=True, context={'request': request})
-            return paginator.get_paginated_response(serializer.data)
-
+        # Manage user feed version for cache invalidation on pull-to-refresh
+        feed_version_key = f"user_feed_ver_{request.user.id}"
+        if refresh:
+            try:
+                feed_version = cache.incr(feed_version_key)
+            except ValueError:
+                feed_version = 1
+                cache.set(feed_version_key, feed_version, timeout=86400)
+            # Delete underlying ranked feed IDs cache
+            cache.delete(f"user_feed_{request.user.id}")
         else:
-            # Ranked feed
-            if refresh:
-                cache_key = f"user_feed_{request.user.id}"
-                cache.delete(cache_key)
+            feed_version = cache.get_or_set(feed_version_key, 1, timeout=86400)
 
-            post_ids = FeedGenerationService.generate_ranked_feed(request.user)
+        cursor = request.query_params.get('cursor', '')
+        page = request.query_params.get('page', '')
+        cache_key = f"user_feed_resp_{request.user.id}_{feed_type}_{cursor}_{page}_v{feed_version}"
 
-            # Paginate cached ranked list using index-based cursor
-            cursor = request.query_params.get('cursor')
-            offset = 0
-            if cursor:
-                try:
-                    import base64
-                    offset = int(base64.b64decode(cursor.encode()).decode())
-                except Exception:
-                    offset = 0
+        def generate_feed_data():
+            if feed_type == 'chronological':
+                # 1. Get followed users
+                followed_ids = list(Follow.objects.filter(follower=request.user).values_list('following_id', flat=True))
+                
+                # 2. Get blocked users
+                blocked_users = BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+                blockers = BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+                all_blocked = set(list(blocked_users) + list(blockers))
 
-            limit = 10
-            page_ids = post_ids[offset:offset+limit]
+                # 3. Retrieve posts
+                posts = Post.objects.filter(
+                    author_id__in=followed_ids,
+                    is_deleted=False
+                ).exclude(
+                    author_id__in=all_blocked
+                ).exclude(
+                    privacy='private'
+                ).order_by('-created_at')
 
-            # Fetch posts in exact order of list IDs
-            if page_ids:
-                clauses = [When(id=pk, then=pos) for pos, pk in enumerate(page_ids)]
-                posts = Post.objects.filter(id__in=page_ids).order_by(Case(*clauses))
+                paginator = ChronologicalFeedPagination()
+                result_page = paginator.paginate_queryset(posts, request)
+                serializer = PostSerializer(result_page, many=True, context={'request': request})
+                
+                next_url = paginator.get_next_link()
+                next_cursor = None
+                if next_url:
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(next_url)
+                    next_cursor = parse_qs(parsed.query).get('cursor', [None])[0]
+
+                return {
+                    'next': next_cursor,
+                    'has_next': next_cursor is not None,
+                    'results': serializer.data
+                }
+
             else:
-                posts = Post.objects.none()
+                # Ranked feed
+                post_ids = FeedGenerationService.generate_ranked_feed(request.user)
 
-            serializer = PostSerializer(posts, many=True, context={'request': request})
+                offset = 0
+                if cursor:
+                    try:
+                        import base64
+                        offset = int(base64.b64decode(cursor.encode()).decode())
+                    except Exception:
+                        offset = 0
 
-            next_offset = offset + limit
-            next_cursor = None
-            if next_offset < len(post_ids):
-                import base64
-                next_cursor = base64.b64encode(str(next_offset).encode()).decode()
+                limit = 10
+                page_ids = post_ids[offset:offset+limit]
 
-            return Response({
-                "next": next_cursor,
-                "has_next": next_cursor is not None,
-                "results": serializer.data
-            }, status=status.HTTP_200_OK)
+                if page_ids:
+                    clauses = [When(id=pk, then=pos) for pos, pk in enumerate(page_ids)]
+                    posts = Post.objects.filter(id__in=page_ids).order_by(Case(*clauses))
+                else:
+                    posts = Post.objects.none()
+
+                serializer = PostSerializer(posts, many=True, context={'request': request})
+
+                next_offset = offset + limit
+                next_cursor = None
+                if next_offset < len(post_ids):
+                    import base64
+                    next_cursor = base64.b64encode(str(next_offset).encode()).decode()
+
+                return {
+                    "next": next_cursor,
+                    "has_next": next_cursor is not None,
+                    "results": serializer.data
+                }
+
+        response_data = cache.get_or_set(cache_key, generate_feed_data, timeout=300) # 5 mins
+        
+        response = Response(response_data, status=status.HTTP_200_OK)
+        # Set Cache-Control private to preserve security since it is user-specific feed
+        response["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+        return response
 
 class PostExploreView(APIView):
     permission_classes = [IsAuthenticated]

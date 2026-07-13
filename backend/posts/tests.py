@@ -910,6 +910,81 @@ class RealTimeFeedWebSocketTests(TransactionTestCase):
         await engagement_comm.disconnect()
 
 
+from django.core.cache import cache
+from rest_framework.test import APIClient
+
+class PostAndProfileCachingTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="cachetestuser",
+            email="cachetest@example.com",
+            password="password123"
+        )
+        self.post = Post.objects.create(
+            author=self.user,
+            content="Caching post content",
+            post_type="text",
+            privacy="public"
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_post_engagement_caching_and_invalidation(self):
+        # 1. First serialize: should compute and cache engagement counts
+        res = self.client.get(f"/api/v1/posts/{self.post.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["like_count"], 0)
+        
+        # Verify the key is cached in Redis
+        cache_key = f"post_engagement:{self.post.id}"
+        cached_val = cache.get(cache_key)
+        self.assertIsNotNone(cached_val)
+        self.assertEqual(cached_val["like_count"], 0)
+
+        # 2. Modify post db model field directly (bypassing normal signals) to test cache hits
+        Post.objects.filter(id=self.post.id).update(like_count=10)
+        
+        # Serialize again: should get cached value (0), not database value (10)
+        res2 = self.client.get(f"/api/v1/posts/{self.post.id}/")
+        self.assertEqual(res2.data["like_count"], 0)
+
+        # 3. Save post (triggers post_save signal): should invalidate cache
+        post_obj = Post.objects.get(id=self.post.id)
+        post_obj.save()
+        
+        # Serialize again: should get updated database value (10)
+        res3 = self.client.get(f"/api/v1/posts/{self.post.id}/")
+        self.assertEqual(res3.data["like_count"], 10)
+
+    def test_profile_caching_and_invalidation(self):
+        # 1. Fetch public profile: should cache base fields
+        res = self.client.get(f"/api/v1/users/profile/{self.user.username}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["full_name"], "")
+
+        # Verify key is cached
+        cache_key = f"user_profile_data:{self.user.username.lower()}"
+        cached_val = cache.get(cache_key)
+        self.assertIsNotNone(cached_val)
+
+        # 2. Modify database fields directly
+        User.objects.filter(id=self.user.id).update(full_name="Updated Cached Name")
+
+        # Fetch again: should get cached value ("")
+        res2 = self.client.get(f"/api/v1/users/profile/{self.user.username}/")
+        self.assertEqual(res2.data["full_name"], "")
+
+        # 3. Save user model (triggers post_save signal): should invalidate cache
+        self.user.full_name = "Updated Cached Name"
+        self.user.save()
+
+        # Fetch again: should get new value
+        res3 = self.client.get(f"/api/v1/users/profile/{self.user.username}/")
+        self.assertEqual(res3.data["full_name"], "Updated Cached Name")
+
+
+
 
 
 

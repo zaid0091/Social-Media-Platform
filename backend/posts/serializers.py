@@ -29,6 +29,25 @@ class RepostedPostSerializer(serializers.ModelSerializer):
     def get_hashtags(self, obj):
         return list(obj.hashtag_associations.values_list('hashtag__name', flat=True))
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        from django.core.cache import cache
+        cache_key = f"post_engagement:{instance.id}"
+        
+        def get_engagement_data():
+            return {
+                'like_count': instance.like_count,
+                'comment_count': instance.comment_count,
+                'share_count': instance.share_count,
+                'bookmark_count': instance.bookmark_count,
+                'repost_count': instance.repost_count,
+                'view_count': instance.view_count,
+            }
+            
+        engagement = cache.get_or_set(cache_key, get_engagement_data, timeout=60)
+        ret.update(engagement)
+        return ret
+
 
 class PostSerializer(serializers.ModelSerializer):
     author = UserFollowDetailsSerializer(read_only=True)
@@ -52,6 +71,25 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_hashtags(self, obj):
         return list(obj.hashtag_associations.values_list('hashtag__name', flat=True))
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        from django.core.cache import cache
+        cache_key = f"post_engagement:{instance.id}"
+        
+        def get_engagement_data():
+            return {
+                'like_count': instance.like_count,
+                'comment_count': instance.comment_count,
+                'share_count': instance.share_count,
+                'bookmark_count': instance.bookmark_count,
+                'repost_count': instance.repost_count,
+                'view_count': instance.view_count,
+            }
+            
+        engagement = cache.get_or_set(cache_key, get_engagement_data, timeout=60)
+        ret.update(engagement)
+        return ret
 
     def get_is_liked(self, obj):
         request = self.context.get('request')

@@ -208,3 +208,13 @@ def create_story_report_post_save(sender, instance, created, **kwargs):
             status='needs_review'
         )
 
+
+from django.core.cache import cache
+
+@receiver([post_save, post_delete], sender=Post)
+def invalidate_post_engagement_cache(sender, instance, **kwargs):
+    cache.delete(f"post_engagement:{instance.id}")
+    if instance.repost_of:
+        cache.delete(f"post_engagement:{instance.repost_of.id}")
+
+

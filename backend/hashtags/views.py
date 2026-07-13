@@ -86,139 +86,139 @@ class TrendingHashtagsView(APIView):
         
         # 2. Build Cache Key based on country
         cache_key = f"trending_data:{country or 'global'}"
-        cached_data = cache.get(cache_key)
-        if cached_data is not None:
-            return Response(cached_data, status=status.HTTP_200_OK)
 
-        # 3. Setup Conditional Aggregations for 7-day sparkline
-        now = timezone.now()
-        aggregations = {}
-        for i in range(7):
-            day_start = now - timedelta(days=6-i)
-            day_start = day_start.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
-            aggregations[f'day_{i}'] = Count(
-                'post_associations',
-                filter=Q(
-                    post_associations__created_at__range=(day_start, day_end),
-                    post_associations__post__is_deleted=False
+        def fetch_trending_data():
+            # 3. Setup Conditional Aggregations for 7-day sparkline
+            now = timezone.now()
+            aggregations = {}
+            for i in range(7):
+                day_start = now - timedelta(days=6-i)
+                day_start = day_start.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+                aggregations[f'day_{i}'] = Count(
+                    'post_associations',
+                    filter=Q(
+                        post_associations__created_at__range=(day_start, day_end),
+                        post_associations__post__is_deleted=False
+                    )
                 )
+
+            # 4. Query Trending Hashtags filtered by country if specified
+            time_threshold = timezone.now() - timedelta(hours=24)
+            
+            # Base hashtag query
+            hashtag_filter = Q(
+                post_associations__created_at__gte=time_threshold,
+                post_associations__post__is_deleted=False
             )
-
-        # 4. Query Trending Hashtags filtered by country if specified
-        time_threshold = timezone.now() - timedelta(hours=24)
-        
-        # Base hashtag query
-        hashtag_filter = Q(
-            post_associations__created_at__gte=time_threshold,
-            post_associations__post__is_deleted=False
-        )
-        if country:
-            hashtag_filter &= Q(post_associations__post__author__location__icontains=country)
-            
-        trending_qs = Hashtag.objects.filter(
-            hashtag_filter
-        ).annotate(
-            recent_post_count=Count('post_associations'),
-            **aggregations
-        ).order_by('-recent_post_count', '-post_count')[:10]
-
-        # Fallback if no trends in country or recent hours
-        if not trending_qs.exists():
-            fallback_filter = Q(post_count__gt=0)
             if country:
-                fallback_filter &= Q(post_associations__post__author__location__icontains=country)
-            
+                hashtag_filter &= Q(post_associations__post__author__location__icontains=country)
+                
             trending_qs = Hashtag.objects.filter(
-                fallback_filter
+                hashtag_filter
             ).annotate(
-                recent_post_count=Count('post_associations', filter=Q(post_associations__post__is_deleted=False)),
+                recent_post_count=Count('post_associations'),
                 **aggregations
-            ).order_by('-post_count')[:10]
-            
-            # If still empty, fall back to global popular
-            if not trending_qs.exists() and country:
+            ).order_by('-recent_post_count', '-post_count')[:10]
+
+            # Fallback if no trends in country or recent hours
+            if not trending_qs.exists():
+                fallback_filter = Q(post_count__gt=0)
+                if country:
+                    fallback_filter &= Q(post_associations__post__author__location__icontains=country)
+                
                 trending_qs = Hashtag.objects.filter(
-                    post_count__gt=0
+                    fallback_filter
                 ).annotate(
                     recent_post_count=Count('post_associations', filter=Q(post_associations__post__is_deleted=False)),
                     **aggregations
                 ).order_by('-post_count')[:10]
+                
+                # If still empty, fall back to global popular
+                if not trending_qs.exists() and country:
+                    trending_qs = Hashtag.objects.filter(
+                        post_count__gt=0
+                    ).annotate(
+                        recent_post_count=Count('post_associations', filter=Q(post_associations__post__is_deleted=False)),
+                        **aggregations
+                    ).order_by('-post_count')[:10]
 
-        # Construct Hashtag items
-        hashtags_list = []
-        for h in trending_qs:
-            activity = [
-                getattr(h, 'day_0', 0),
-                getattr(h, 'day_1', 0),
-                getattr(h, 'day_2', 0),
-                getattr(h, 'day_3', 0),
-                getattr(h, 'day_4', 0),
-                getattr(h, 'day_5', 0),
-                getattr(h, 'day_6', 0)
-            ]
-            hashtags_list.append({
-                "id": str(h.id),
-                "name": h.name,
-                "post_count": h.post_count,
-                "recent_activity": activity
-            })
+            # Construct Hashtag items
+            hashtags_list = []
+            for h in trending_qs:
+                activity = [
+                    getattr(h, 'day_0', 0),
+                    getattr(h, 'day_1', 0),
+                    getattr(h, 'day_2', 0),
+                    getattr(h, 'day_3', 0),
+                    getattr(h, 'day_4', 0),
+                    getattr(h, 'day_5', 0),
+                    getattr(h, 'day_6', 0)
+                ]
+                hashtags_list.append({
+                    "id": str(h.id),
+                    "name": h.name,
+                    "post_count": h.post_count,
+                    "recent_activity": activity
+                })
 
-        # 5. Extract Non-Hashtag Trending Topics (Top 5 common words)
-        post_filter = Q(
-            created_at__gte=time_threshold,
-            is_deleted=False,
-            needs_review=False
-        )
-        if country:
-            post_filter &= Q(author__location__icontains=country)
-            
-        posts_content = Post.objects.filter(post_filter).values_list('content', flat=True)
-        if not posts_content.exists() and country:
-            # Fallback to global
-            posts_content = Post.objects.filter(
+            # 5. Extract Non-Hashtag Trending Topics (Top 5 common words)
+            post_filter = Q(
                 created_at__gte=time_threshold,
                 is_deleted=False,
                 needs_review=False
-            ).values_list('content', flat=True)
+            )
+            if country:
+                post_filter &= Q(author__location__icontains=country)
+                
+            posts_content = Post.objects.filter(post_filter).values_list('content', flat=True)
+            if not posts_content.exists() and country:
+                # Fallback to global
+                posts_content = Post.objects.filter(
+                    created_at__gte=time_threshold,
+                    is_deleted=False,
+                    needs_review=False
+                ).values_list('content', flat=True)
 
-        stop_words = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
-            'to', 'for', 'in', 'on', 'at', 'with', 'this', 'that', 'it', 'of',
-            'my', 'your', 'his', 'her', 'their', 'our', 'me', 'you', 'he', 'she',
-            'they', 'we', 'i', 'have', 'has', 'had', 'do', 'does', 'did', 'about',
-            'be', 'been', 'being', 'from', 'by', 'as', 'at', 'so', 'if', 'out',
-            'up', 'down', 'about', 'just', 'like', 'how', 'what', 'when', 'where',
-            'who', 'why', 'can', 'will', 'would', 'should', 'could', 'some', 'any',
-            'more', 'most', 'other', 'them', 'us', 'there', 'their', 'then', 'than'
-        }
-        
-        word_counts = {}
-        for content in posts_content:
-            if not content:
-                continue
-            words = content.split()
-            for word in words:
-                if word.startswith('#') or word.startswith('@'):
+            stop_words = {
+                'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
+                'to', 'for', 'in', 'on', 'at', 'with', 'this', 'that', 'it', 'of',
+                'my', 'your', 'his', 'her', 'their', 'our', 'me', 'you', 'he', 'she',
+                'they', 'we', 'i', 'have', 'has', 'had', 'do', 'does', 'did', 'about',
+                'be', 'been', 'being', 'from', 'by', 'as', 'at', 'so', 'if', 'out',
+                'up', 'down', 'about', 'just', 'like', 'how', 'what', 'when', 'where',
+                'who', 'why', 'can', 'will', 'would', 'should', 'could', 'some', 'any',
+                'more', 'most', 'other', 'them', 'us', 'there', 'their', 'then', 'than'
+            }
+            
+            word_counts = {}
+            for content in posts_content:
+                if not content:
                     continue
-                # Clean punctuation
-                clean_word = word.translate(str.maketrans('', '', string.punctuation)).lower().strip()
-                if len(clean_word) < 3 or clean_word in stop_words:
-                    continue
-                word_counts[clean_word] = word_counts.get(clean_word, 0) + 1
+                words = content.split()
+                for word in words:
+                    if word.startswith('#') or word.startswith('@'):
+                        continue
+                    # Clean punctuation
+                    clean_word = word.translate(str.maketrans('', '', string.punctuation)).lower().strip()
+                    if len(clean_word) < 3 or clean_word in stop_words:
+                        continue
+                    word_counts[clean_word] = word_counts.get(clean_word, 0) + 1
 
-        sorted_words = sorted(word_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-        topics_list = [{"name": word, "count": count} for word, count in sorted_words]
+            sorted_words = sorted(word_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+            topics_list = [{"name": word, "count": count} for word, count in sorted_words]
 
-        # 6. Cache and return
-        response_data = {
-            "hashtags": hashtags_list,
-            "topics": topics_list,
-            "country": country
-        }
+            return {
+                "hashtags": hashtags_list,
+                "topics": topics_list,
+                "country": country
+            }
+
+        response_data = cache.get_or_set(cache_key, fetch_trending_data, timeout=900) # 15 mins
         
-        cache.set(cache_key, response_data, timeout=900) # Cache for 15 mins
-        return Response(response_data, status=status.HTTP_200_OK)
+        response = Response(response_data, status=status.HTTP_200_OK)
+        response["Cache-Control"] = "public, max-age=60, stale-while-revalidate=600"
+        return response
 
 class HashtagSearchView(APIView):
     permission_classes = [IsAuthenticated]
