@@ -23,10 +23,12 @@ import { parseContent } from '@/utils/parseContent';
 import usePost from '@/hooks/usePost';
 import useCommentsQuery from '@/hooks/useCommentsQuery';
 import FlatList from '@/components/ui/FlatList';
+import useUI from '@/hooks/useUI';
 
 export default function PostDetailClient({ id }) {
   const router = useRouter();
   const { user: currentUser } = useAuthStore();
+  const { addToast } = useUI();
   
   // Input tracking states
   const [commentText, setCommentText] = useState('');
@@ -116,21 +118,75 @@ export default function PostDetailClient({ id }) {
     if (submitting) return;
     setSubmitting(true);
 
+    const tempId = `temp-${Date.now()}`;
+    const commentContent = replyTarget ? `@${replyTarget.username} ${text}` : text;
+    
+    const newComment = {
+      id: tempId,
+      content: commentContent,
+      author: {
+        id: currentUser?.id,
+        username: currentUser?.username,
+        full_name: currentUser?.full_name,
+        profile_picture: currentUser?.profile_picture,
+      },
+      created_at: new Date().toISOString(),
+      parent: replyTarget ? replyTarget.commentId : null,
+      is_pending: true,
+    };
+
+    const queryKey = ['posts', id, 'comments'];
+    const previousComments = queryClient.getQueryData(queryKey);
+
+    // Optimistically prepend to comments query cache
+    queryClient.setQueryData(queryKey, (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page, index) => {
+          if (index === 0) {
+            return {
+              ...page,
+              results: [newComment, ...page.results],
+            };
+          }
+          return page;
+        }),
+      };
+    });
+
     try {
       const payload = {
         post: post.id,
-        content: replyTarget ? `@${replyTarget.username} ${text}` : text,
+        content: commentContent,
         parent: replyTarget ? replyTarget.commentId : null
       };
       
-      await api.post(`/posts/${post.id}/comments/`, payload);
+      const res = await api.post(`/posts/${post.id}/comments/`, payload);
+      const realComment = res.data;
       setCommentText('');
       setReplyTarget(null);
       
-      queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });
+      // Replace temp comment with real data
+      queryClient.setQueryData(queryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            results: page.results.map((c) => (c.id === tempId ? realComment : c)),
+          })),
+        };
+      });
+
       mutatePost();
     } catch (err) {
       console.error('Failed to submit comment', err);
+      // Revert on failure
+      if (previousComments) {
+        queryClient.setQueryData(queryKey, previousComments);
+      }
+      addToast('Failed to post comment', 'error');
     } finally {
       setSubmitting(false);
     }

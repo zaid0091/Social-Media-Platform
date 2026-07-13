@@ -26,6 +26,7 @@ import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import CarouselComponent from './CarouselComponent';
 import dynamic from 'next/dynamic';
+import useUI from '@/hooks/useUI';
 
 const VideoPlayer = dynamic(() => import('./VideoPlayer'), {
   ssr: false,
@@ -56,6 +57,7 @@ const getRelativeTime = (dateString) => {
 export default function PostCard({ post, onDelete }) {
   const router = useRouter();
   const { user: currentUser } = useAuthStore();
+  const { addToast } = useUI();
 
   const [isLiked, setIsLiked] = useState(post.is_liked);
   const [likeCount, setLikeCount] = useState(post.like_count || 0);
@@ -72,7 +74,6 @@ export default function PostCard({ post, onDelete }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [animateHeart, setAnimateHeart] = useState(false);
-  const [toast, setToast] = useState(null);
 
   const [postContent, setPostContent] = useState(post.content);
   const [isEditing, setIsEditing] = useState(false);
@@ -140,6 +141,7 @@ export default function PostCard({ post, onDelete }) {
       // Revert on failure
       setIsLiked(wasLiked);
       setLikeCount((prev) => wasLiked ? prev + 1 : Math.max(0, prev - 1));
+      addToast('Failed to update like status', 'error');
     }
   };
 
@@ -153,8 +155,10 @@ export default function PostCard({ post, onDelete }) {
       try {
         await api.post(`/posts/bookmark/${post.id}/`);
         setIsBookmarkMenuOpen(true);
+        addToast('Added to bookmarks', 'success');
       } catch (err) {
         setIsBookmarked(false);
+        addToast('Failed to bookmark post', 'error');
       }
     } else {
       setIsBookmarkMenuOpen(!isBookmarkMenuOpen);
@@ -167,10 +171,10 @@ export default function PostCard({ post, onDelete }) {
     setIsBookmarkMenuOpen(false);
     try {
       await api.post(`/posts/bookmark/${post.id}/`);
-      setToast('Removed from bookmarks');
-      setTimeout(() => setToast(null), 2500);
+      addToast('Removed from bookmarks', 'success');
     } catch (err) {
       setIsBookmarked(true);
+      addToast('Failed to remove bookmark', 'error');
     }
   };
 
@@ -189,11 +193,11 @@ export default function PostCard({ post, onDelete }) {
 
     try {
       await api.post(`/posts/${post.id}/repost/`);
-      setToast(wasReposted ? 'Repost removed' : 'Reposted successfully!');
-      setTimeout(() => setToast(null), 2500);
+      addToast(wasReposted ? 'Repost removed' : 'Reposted successfully!', 'success');
     } catch (err) {
       setIsReposted(wasReposted);
       setRepostCount((prev) => wasReposted ? prev + 1 : Math.max(0, prev - 1));
+      addToast('Failed to repost', 'error');
     }
   };
 
@@ -206,9 +210,9 @@ export default function PostCard({ post, onDelete }) {
       } else {
         setIsHidden(true);
       }
+      addToast('Post deleted', 'success');
     } catch (err) {
-      setToast('Failed to delete post.');
-      setTimeout(() => setToast(null), 2500);
+      addToast('Failed to delete post.', 'error');
     }
   };
 
@@ -218,11 +222,9 @@ export default function PostCard({ post, onDelete }) {
       await api.patch(`/posts/${post.id}/update/`, { content: editContent });
       setPostContent(editContent);
       setIsEditing(false);
-      setToast('Post updated successfully');
-      setTimeout(() => setToast(null), 2500);
+      addToast('Post updated successfully', 'success');
     } catch (err) {
-      setToast('Failed to update post');
-      setTimeout(() => setToast(null), 2500);
+      addToast('Failed to update post', 'error');
     }
   };
 
@@ -232,11 +234,9 @@ export default function PostCard({ post, onDelete }) {
       await api.post(`/users/block/${post.author.id}/`);
       setIsBlockConfirmOpen(false);
       setIsHidden(true);
-      setToast('User blocked');
-      setTimeout(() => setToast(null), 2500);
+      addToast('User blocked', 'success');
     } catch (err) {
-      setToast(err.response?.data?.error || 'Failed to block user');
-      setTimeout(() => setToast(null), 2500);
+      addToast(err.response?.data?.error || 'Failed to block user', 'error');
     } finally {
       setLoadingAction(false);
     }
@@ -247,11 +247,9 @@ export default function PostCard({ post, onDelete }) {
     try {
       await api.post(`/users/restrict/${post.author.id}/`);
       setIsRestrictConfirmOpen(false);
-      setToast('User restricted');
-      setTimeout(() => setToast(null), 2500);
+      addToast('User restricted', 'success');
     } catch (err) {
-      setToast(err.response?.data?.error || 'Failed to restrict user');
-      setTimeout(() => setToast(null), 2500);
+      addToast(err.response?.data?.error || 'Failed to restrict user', 'error');
     } finally {
       setLoadingAction(false);
     }
@@ -260,20 +258,12 @@ export default function PostCard({ post, onDelete }) {
   const isOwnPost = currentUser && post.author.id === currentUser.id;
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border-b border-zinc-150 dark:border-zinc-800/80 w-full relative flex flex-col">
+    <div className={`bg-white dark:bg-zinc-900 border-b border-zinc-150 dark:border-zinc-800/80 w-full relative flex flex-col ${post.is_pending ? 'opacity-65 select-none pointer-events-none' : ''}`}>
       {/* Repost attribution header */}
       {post.post_type === 'repost' && (
         <div className="flex items-center space-x-1.5 px-4 pt-3 text-[10px] font-black text-zinc-400 dark:text-zinc-550 uppercase tracking-wider select-none">
           <Repeat2 className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
           <span>{post.author?.full_name || post.author?.username} Reposted</span>
-        </div>
-      )}
-
-      {/* Toast Alert popup overlay */}
-      {toast && (
-        <div className="absolute top-4 right-4 z-20 px-3 py-2 bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-md">
-          <Check className="h-4 w-4" />
-          <span>{toast}</span>
         </div>
       )}
 
@@ -306,7 +296,14 @@ export default function PostCard({ post, onDelete }) {
             <div className="flex items-center space-x-1 text-zinc-500 text-xs font-medium mt-0.5">
               <span>@{post.author.username}</span>
               <span>•</span>
-              <span className="truncate">{getRelativeTime(post.created_at)}</span>
+              {post.is_pending ? (
+                <span className="text-zinc-400 dark:text-zinc-500 italic flex items-center space-x-1">
+                  <span className="h-2.5 w-2.5 border border-t-transparent border-zinc-450 dark:border-zinc-500 animate-spin rounded-full" />
+                  <span>Sharing...</span>
+                </span>
+              ) : (
+                <span className="truncate">{getRelativeTime(post.created_at)}</span>
+              )}
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { UserPlus, UserCheck, UserMinus, Clock, X } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import useUI from '@/hooks/useUI';
 
 export default function FollowButton({
   userId,
@@ -15,6 +16,7 @@ export default function FollowButton({
   className = ''
 }) {
   const { user: currentUser } = useAuthStore();
+  const { addToast } = useUI();
   
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   const [isPending, setIsPending] = useState(initialFollowRequestPending);
@@ -75,6 +77,7 @@ export default function FollowButton({
       setIsFollowing(prevFollowing);
       setIsPending(prevPending);
       if (onStateChange) onStateChange(prevFollowing, prevPending);
+      addToast('Failed to update follow status', 'error');
     } finally {
       setLoading(false);
     }

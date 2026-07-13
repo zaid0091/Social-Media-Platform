@@ -221,7 +221,7 @@ export default function CommentItem({ comment, onReply, onDelete, onEdit }) {
       )}
 
       {/* Comment Body block */}
-      <div className="flex space-x-3 items-start text-sm group/comment">
+      <div className={`flex space-x-3 items-start text-sm group/comment ${comment.is_pending ? 'opacity-65 select-none' : ''}`}>
         {/* Commenter Avatar */}
         <Link href={`/${comment.author.username}`} className="shrink-0">
           {comment.author.profile_picture ? (
@@ -277,88 +277,99 @@ export default function CommentItem({ comment, onReply, onDelete, onEdit }) {
               </p>
 
               <div className="flex items-center space-x-4 text-xs text-zinc-500 mt-1 font-semibold">
-                <span>{getRelativeTime(comment.created_at)}</span>
-                <button 
-                  onClick={() => onReply(comment.id, comment.author.username)}
-                  className="hover:underline font-bold cursor-pointer"
-                >
-                  Reply
-                </button>
+                {comment.is_pending ? (
+                  <span className="text-zinc-400 dark:text-zinc-500 italic flex items-center space-x-1 select-none">
+                    <span className="h-2 w-2 rounded-full border border-t-transparent border-zinc-400 dark:border-zinc-500 animate-spin shrink-0" />
+                    <span>Posting...</span>
+                  </span>
+                ) : (
+                  <>
+                    <span>{getRelativeTime(comment.created_at)}</span>
+                    <button 
+                      onClick={() => onReply(comment.id, comment.author.username)}
+                      className="hover:underline font-bold cursor-pointer"
+                    >
+                      Reply
+                    </button>
+                  </>
+                )}
               </div>
             </>
           )}
         </div>
 
-        {/* Options Menu icon & dropdown trigger */}
-        <div className="flex items-center space-x-2 shrink-0">
-          {/* Like button controls */}
-          <button 
-            onClick={handleLikeToggle}
-            className={`flex items-center space-x-1 hover:text-red-500 cursor-pointer ${
-              isLiked ? 'text-red-500 animate-pulse' : 'text-zinc-400'
-            }`}
-            aria-label="Like comment"
-          >
-            <Heart 
-              className={`h-4 w-4 transition-transform ${
-                isLiked ? 'fill-red-500 text-red-500' : ''
-              } ${animateHeart ? 'scale-125' : 'scale-100'}`} 
-            />
-            {likeCount > 0 && <span className="text-xs font-semibold">{likeCount}</span>}
-          </button>
-
-          {/* Three-dot dropdown menu trigger */}
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-350 cursor-pointer opacity-0 group-hover/comment:opacity-100 transition-opacity"
-              aria-label="Comment options"
+        {/* Options Menu icon & dropdown trigger (Disabled on pending) */}
+        {!comment.is_pending && (
+          <div className="flex items-center space-x-2 shrink-0">
+            {/* Like button controls */}
+            <button 
+              onClick={handleLikeToggle}
+              className={`flex items-center space-x-1 hover:text-red-500 cursor-pointer ${
+                isLiked ? 'text-red-500 animate-pulse' : 'text-zinc-400'
+              }`}
+              aria-label="Like comment"
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <Heart 
+                className={`h-4 w-4 transition-transform ${
+                  isLiked ? 'fill-red-500 text-red-500' : ''
+                } ${animateHeart ? 'scale-125' : 'scale-100'}`} 
+              />
+              {likeCount > 0 && <span className="text-xs font-semibold">{likeCount}</span>}
             </button>
 
-            {isMenuOpen && (
-              <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-20 py-1 text-xs font-semibold overflow-hidden">
-                {isOwnComment ? (
-                  <>
+            {/* Three-dot dropdown menu trigger */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-350 cursor-pointer opacity-0 group-hover/comment:opacity-100 transition-opacity"
+                aria-label="Comment options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+
+              {isMenuOpen && (
+                <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-20 py-1 text-xs font-semibold overflow-hidden">
+                  {isOwnComment ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setIsEditing(true);
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-1.5 cursor-pointer"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        <span>Edit Comment</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowConfirmDelete(true);
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    </>
+                  ) : (
                     <button
                       onClick={() => {
-                        setIsEditing(true);
+                        setToast('Report submitted');
                         setIsMenuOpen(false);
+                        setTimeout(() => setToast(null), 2500);
                       }}
-                      className="w-full text-left px-3 py-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-1.5 cursor-pointer"
+                      className="w-full text-left px-3 py-2 text-amber-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-1.5 cursor-pointer"
                     >
-                      <Edit3 className="h-3.5 w-3.5" />
-                      <span>Edit Comment</span>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      <span>Report</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        setShowConfirmDelete(true);
-                        setIsMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Delete</span>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setToast('Report submitted');
-                      setIsMenuOpen(false);
-                      setTimeout(() => setToast(null), 2500);
-                    }}
-                    className="w-full text-left px-3 py-2 text-amber-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center space-x-1.5 cursor-pointer"
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    <span>Report</span>
-                  </button>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 4. Collapsible replies drawers section */}

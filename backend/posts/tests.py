@@ -574,14 +574,14 @@ class PostCommentsAPITests(TestCase):
         res = self.client.get(f"/api/v1/posts/{self.post.id}/comments/")
         self.assertEqual(res.status_code, 200)
         # Should only list top-level comments (c1, c2), not r1
-        self.assertEqual(res.data["count"], 2)
+        self.assertEqual(len(res.data["results"]), 2)
         self.assertEqual(res.data["results"][0]["content"], "Comment 2")
         self.assertEqual(res.data["results"][1]["content"], "Comment 1")
 
         # Get replies for c1
         res = self.client.get(f"/api/v1/posts/comments/{c1.id}/replies/")
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["count"], 1)
+        self.assertEqual(len(res.data["results"]), 1)
         self.assertEqual(res.data["results"][0]["content"], "Reply to 1")
 
     def test_comment_update_permissions(self):

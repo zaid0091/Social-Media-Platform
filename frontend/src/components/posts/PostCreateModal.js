@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import api from '@/services/api';
 import useUIStore from '@/store/useUIStore';
+import useAuthStore from '@/store/useAuthStore';
+import { useQueryClient } from '@tanstack/react-query';
+import { postKeys } from '@/utils/queryKeys';
 import MentionDropdown from './MentionDropdown';
 
 const ImageCropper = dynamic(() => import('./ImageCropper'), {
@@ -26,6 +29,8 @@ const ImageCropper = dynamic(() => import('./ImageCropper'), {
 });
 
 export default function PostCreateModal() {
+  const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
   const { isPostCreateOpen, closePostCreate } = useUIStore();
   const [step, setStep] = useState(1); // 1: Media Selection, 2: Edit/Reorder, 3: Details
   
@@ -55,7 +60,6 @@ export default function PostCreateModal() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState(null);
 
   const contentRef = useRef(null);
 
@@ -243,6 +247,59 @@ export default function PostCreateModal() {
     setUploading(true);
     setError('');
 
+    const tempId = `temp-${Date.now()}`;
+    const newPost = {
+      id: tempId,
+      content,
+      privacy,
+      post_type: selectedFiles.length > 0 ? (selectedFiles.some(f => f.file.type.startsWith('video')) ? 'video' : 'image') : 'text',
+      author: {
+        id: currentUser?.id,
+        username: currentUser?.username,
+        full_name: currentUser?.full_name,
+        profile_picture: currentUser?.profile_picture,
+      },
+      media: selectedFiles.map((f, i) => ({
+        id: `temp-media-${i}`,
+        media_url: f.preview, // Instant local preview blob url
+        media_type: f.file.type.startsWith('video') ? 'video' : 'image',
+        order: i,
+      })),
+      like_count: 0,
+      comment_count: 0,
+      share_count: 0,
+      bookmark_count: 0,
+      repost_count: 0,
+      view_count: 0,
+      created_at: new Date().toISOString(),
+      is_pending: true,
+    };
+
+    const queryKey = postKeys.all;
+
+    // Optimistically prepend to active feeds/lists in react-query cache
+    queryClient.setQueriesData({ queryKey }, (old) => {
+      if (!old) return old;
+      if (old.pages) {
+        return {
+          ...old,
+          pages: old.pages.map((page, index) => {
+            if (index === 0) {
+              return {
+                ...page,
+                results: [newPost, ...page.results],
+              };
+            }
+            return page;
+          }),
+        };
+      }
+      return old;
+    });
+
+    closePostCreate();
+    useUIStore.getState().addToast('Publishing post...', 'info');
+
     let uploadedMedia = [];
 
     // Step 3.1: Upload files to Cloudinary if media exists
@@ -262,7 +319,21 @@ export default function PostCreateModal() {
         });
         uploadedMedia = uploadRes.data;
       } catch (err) {
-        setError('Failed to upload media. Please try again.');
+        // Remove optimistic post on upload error
+        queryClient.setQueriesData({ queryKey }, (old) => {
+          if (!old) return old;
+          if (old.pages) {
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                results: page.results.filter((p) => p.id !== tempId),
+              })),
+            };
+          }
+          return old;
+        });
+        useUIStore.getState().addToast('Failed to upload post media.', 'error');
         setUploading(false);
         return;
       }
@@ -270,7 +341,7 @@ export default function PostCreateModal() {
 
     // Step 3.2: Create database post entry
     try {
-      await api.post('/posts/', {
+      const res = await api.post('/posts/', {
         content,
         privacy,
         media: uploadedMedia.map((m, index) => ({
@@ -281,16 +352,42 @@ export default function PostCreateModal() {
           order: index
         }))
       });
+      const realPost = res.data;
 
-      setToast({ message: 'Post shared successfully!', type: 'success' });
-      setTimeout(() => {
-        setToast(null);
-        closePostCreate();
-        // Force refresh feed on success
-        window.location.reload();
-      }, 1500);
+      // Replace optimistic post with backend post details
+      queryClient.setQueriesData({ queryKey }, (old) => {
+        if (!old) return old;
+        const replacePost = (post) => (post.id === tempId ? realPost : post);
+        if (old.pages) {
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              results: page.results.map(replacePost),
+            })),
+          };
+        }
+        return old;
+      });
+
+      useUIStore.getState().addToast('Post shared successfully!', 'success');
+      queryClient.invalidateQueries({ queryKey: postKeys.all });
     } catch (err) {
-      setError(err.response?.data?.content?.[0] || 'Failed to publish post.');
+      // Remove optimistic post on creation error
+      queryClient.setQueriesData({ queryKey }, (old) => {
+        if (!old) return old;
+        if (old.pages) {
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              results: page.results.filter((p) => p.id !== tempId),
+            })),
+          };
+        }
+        return old;
+      });
+      useUIStore.getState().addToast('Failed to publish post.', 'error');
       setUploading(false);
     }
   };
@@ -299,13 +396,6 @@ export default function PostCreateModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 px-4 py-3 bg-emerald-500 text-white rounded-xl shadow-lg flex items-center space-x-2 text-sm font-semibold animate-bounce">
-          <Check className="h-5 w-5" />
-          <span>{toast.message}</span>
-        </div>
-      )}
-
       {/* Main modal card container */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[85vh]">
         {/* Navigation / Header */}

@@ -17,6 +17,7 @@ const PostCreateModal = dynamic(() => import('@/components/posts/PostCreateModal
 });
 import SuggestedUsersWidget from '@/components/profile/SuggestedUsersWidget';
 import Sparkline from '@/components/posts/Sparkline';
+import ToastContainer from '@/components/ui/ToastContainer';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -156,6 +157,9 @@ export default function MainLayout({ children }) {
 
       {/* Global Post Creation Modal overlay */}
       <PostCreateModal />
+
+      {/* Global Toast Container notifier */}
+      <ToastContainer />
     </div>
   );
 }
