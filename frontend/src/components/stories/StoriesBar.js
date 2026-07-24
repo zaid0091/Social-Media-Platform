@@ -11,6 +11,7 @@ const StoryViewer = dynamic(() => import('./StoryViewer'), {
   loading: () => <div className="fixed inset-0 z-55 bg-black/90 flex items-center justify-center text-white font-semibold">Loading story...</div>
 });
 import { Plus } from 'lucide-react';
+import StoryBarSkeleton from '@/components/ui/StoryBarSkeleton';
 
 export default function StoriesBar() {
   const { user: currentUser } = useAuthStore();
@@ -18,7 +19,11 @@ export default function StoriesBar() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   // Fetch active stories list grouped by author using React Query
-  const { data: storyGroups = [], refetch: refetchStories } = useStories();
+  const { data: storyGroups = [], isLoading, refetch: refetchStories } = useStories();
+
+  if (isLoading) {
+    return <StoryBarSkeleton />;
+  }
 
   const handleOpenViewer = (index) => {
     setViewerIndex(index);

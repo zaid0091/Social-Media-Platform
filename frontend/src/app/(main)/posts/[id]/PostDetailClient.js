@@ -24,6 +24,8 @@ import usePost from '@/hooks/usePost';
 import useCommentsQuery from '@/hooks/useCommentsQuery';
 import FlatList from '@/components/ui/FlatList';
 import useUI from '@/hooks/useUI';
+import PostCardSkeleton from '@/components/ui/PostCardSkeleton';
+import CommentSkeleton from '@/components/ui/CommentSkeleton';
 
 export default function PostDetailClient({ id }) {
   const router = useRouter();
@@ -229,11 +231,7 @@ export default function PostDetailClient({ id }) {
   };
 
   if (!post) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="h-8 w-8 rounded-full border-4 border-zinc-200 border-t-primary animate-spin" />
-      </div>
-    );
+    return <PostCardSkeleton />;
   }
 
   return (
@@ -335,6 +333,13 @@ export default function PostDetailClient({ id }) {
               error={commentsError}
               refetch={refetchComments}
               className="space-y-4"
+              ListFooterComponent={
+                (loadingComments || isFetchingNextPage) && (
+                  <div className="space-y-3.5">
+                    {[1, 2, 3].map((i) => <CommentSkeleton key={i} />)}
+                  </div>
+                )
+              }
               ListEmptyComponent={
                 <p className="text-center py-6 text-xs text-zinc-400 font-semibold select-none">
                   No comments yet. Write the first comment!

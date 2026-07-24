@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
@@ -11,6 +11,8 @@ import LeftSidebar from '@/components/navigation/LeftSidebar';
 import BottomNav from '@/components/navigation/BottomNav';
 import CreatePostFAB from '@/components/navigation/CreatePostFAB';
 import dynamic from 'next/dynamic';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import useNotificationStore from '@/store/useNotificationStore';
 
 const PostCreateModal = dynamic(() => import('@/components/posts/PostCreateModal'), {
   ssr: false
@@ -24,6 +26,10 @@ const fetcher = (url) => api.get(url).then((res) => res.data);
 export default function MainLayout({ children }) {
   const { isAuthenticated, isLoading } = useAuthStore();
   const router = useRouter();
+  const [isOnline, setIsOnline] = useState(true);
+  
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
 
   // SWR queries for Right Sidebar (Trending hashtags only, suggestions moved to widget)
   const { data: trending } = useSWR(
@@ -31,7 +37,27 @@ export default function MainLayout({ children }) {
     fetcher
   );
 
+  useEffect(() => {
+    if (unreadCount > 0) {
+      setLiveAnnouncement(`You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`);
+    } else {
+      setLiveAnnouncement('');
+    }
+  }, [unreadCount]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      const goOnline = () => setIsOnline(true);
+      const goOffline = () => setIsOnline(false);
+      window.addEventListener('online', goOnline);
+      window.addEventListener('offline', goOffline);
+      return () => {
+        window.removeEventListener('online', goOnline);
+        window.removeEventListener('offline', goOffline);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -49,14 +75,41 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="min-h-screen w-full flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-200">
+      {/* Skip to Content link for keyboard-only accessibility users */}
+      <a 
+        href="#main-content" 
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2.5 focus:bg-primary focus:text-white focus:text-xs focus:font-black focus:rounded-2xl focus:shadow-xl focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:outline-none"
+      >
+        Skip to content
+      </a>
+
+      {/* Screen Reader ARIA Live Region for dynamic badge changes */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement}
+      </div>
+
       <div className="w-full flex min-h-screen relative">
         
         {/* Left Column: Sidebar Navigation (Desktop) */}
         <LeftSidebar />
 
         {/* Center Column: Page Content Area */}
-        <main className="flex-1 min-w-0 min-h-screen bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 pb-16 md:pb-0">
-          {children}
+        <main 
+          id="main-content"
+          tabIndex="-1"
+          className="flex-1 min-w-0 min-h-screen bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 pb-16 md:pb-0 flex flex-col focus:outline-none"
+        >
+          {!isOnline && (
+            <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-2.5 px-4 shrink-0 flex items-center justify-center space-x-2 animate-slide-down shadow-md z-50">
+              <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+              <span>Connection lost. You are currently viewing cached data offline.</span>
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </div>
         </main>
 
         {/* Right Column: Sidebar Suggestions & Trending (Desktop) */}

@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, CheckCircle2, ChevronRight, AlertCircle } from 'lucide-react';
 import api from '@/services/api';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 export default function ReportModal({ isOpen, onClose, targetType, targetId }) {
+  const modalRef = useModalAccessibility(isOpen, onClose);
   const [step, setStep] = useState(1); // 1: Reason, 2: Description, 3: Success
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
@@ -63,7 +65,12 @@ export default function ReportModal({ isOpen, onClose, targetType, targetId }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm transition-opacity"
@@ -71,7 +78,13 @@ export default function ReportModal({ isOpen, onClose, targetType, targetId }) {
       />
 
       {/* Modal Container */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-md w-full shadow-2xl relative z-10 overflow-hidden text-left flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+      <div 
+        ref={modalRef}
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-md w-full shadow-2xl relative z-10 overflow-hidden text-left flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Report ${targetType || 'Content'}`}
+      >
         
         {/* Header */}
         <div className="p-5 border-b border-zinc-150 dark:border-zinc-800/80 flex items-center justify-between shrink-0">

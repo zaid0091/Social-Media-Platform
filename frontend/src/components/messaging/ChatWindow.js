@@ -16,6 +16,7 @@ const EmojiPicker = dynamic(() => import('@/components/ui/EmojiPicker'), {
 import useAuthStore from '@/store/useAuthStore';
 import useChatSocket from '@/hooks/useChatSocket';
 import useMessages from '@/hooks/useMessages';
+import MessageSkeleton from '@/components/ui/MessageSkeleton';
 
 // Common emojis for quick reaction picker
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -478,173 +479,183 @@ export default function ChatWindow({ conversationId, onGoBack }) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/30 dark:bg-zinc-950/5"
       >
-        {loadingOlder && (
-          <div className="flex justify-center py-2">
-            <div className="h-4 w-4 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" />
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <MessageSkeleton key={i} />
+            ))}
           </div>
-        )}
+        ) : (
+          <>
+            {loadingOlder && (
+              <div className="flex justify-center py-2">
+                <div className="h-4 w-4 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" />
+              </div>
+            )}
 
-        {Object.entries(groupedMessages).map(([dateLabel, msgs]) => (
-          <div key={dateLabel} className="space-y-3.5">
-            <div className="flex justify-center">
-              <span className="bg-zinc-200/50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
-                {dateLabel}
-              </span>
-            </div>
+            {Object.entries(groupedMessages).map(([dateLabel, msgs]) => (
+              <div key={dateLabel} className="space-y-3.5">
+                <div className="flex justify-center">
+                  <span className="bg-zinc-200/50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
+                    {dateLabel}
+                  </span>
+                </div>
 
-            {/* Messages iteration */}
-            {msgs.map((msg) => {
-              const isOwn = msg.sender?.id === currentUser?.id;
-              const hasRepliedTo = !!msg.replied_to;
-              const isMenuOpen = activeMenuId === msg.id;
-              const isReactionPickerOpen = activeReactionPickerId === msg.id;
+                {/* Messages iteration */}
+                {msgs.map((msg) => {
+                  const isOwn = msg.sender?.id === currentUser?.id;
+                  const hasRepliedTo = !!msg.replied_to;
+                  const isMenuOpen = activeMenuId === msg.id;
+                  const isReactionPickerOpen = activeReactionPickerId === msg.id;
 
-              return (
-                <div 
-                  key={msg.id} 
-                  id={`msg-${msg.id}`}
-                  className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} space-y-1 relative group`}
-                >
-                  
-                  {/* Replied Message preview block */}
-                  {hasRepliedTo && (
-                    <div className={`text-[10px] text-zinc-400 dark:text-zinc-500 px-3 py-1 bg-zinc-100 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/30 dark:border-zinc-800/20 max-w-sm mb-1 ${
-                      isOwn ? 'mr-1' : 'ml-1'
-                    }`}>
-                      <span className="font-extrabold mr-1 text-zinc-500">@{msg.replied_to.sender_username}:</span>
-                      <span>{msg.replied_to.content}</span>
-                    </div>
-                  )}
+                  return (
+                    <div 
+                      key={msg.id} 
+                      id={`msg-${msg.id}`}
+                      className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} space-y-1 relative group`}
+                    >
+                      
+                      {/* Replied Message preview block */}
+                      {hasRepliedTo && (
+                        <div className={`text-[10px] text-zinc-400 dark:text-zinc-550 px-3 py-1 bg-zinc-100 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/30 dark:border-zinc-800/20 max-w-sm mb-1 ${
+                          isOwn ? 'mr-1' : 'ml-1'
+                        }`}>
+                          <span className="font-extrabold mr-1 text-zinc-500">@{msg.replied_to.sender_username}:</span>
+                          <span>{msg.replied_to.content}</span>
+                        </div>
+                      )}
 
-                  <div className={`flex items-center space-x-1.5 ${isOwn ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
-                    
-                    {/* Message Bubble Card */}
-                    <div className="relative group/bubble max-w-sm">
-                      <div 
-                        className={`px-4 py-2.5 rounded-2.5xl text-xs leading-normal select-text relative shadow-sm border ${
-                          isOwn 
-                            ? 'bg-primary text-white border-transparent rounded-tr-sm' 
-                            : 'bg-white dark:bg-zinc-850 text-zinc-900 dark:text-zinc-150 border-zinc-100 dark:border-zinc-800/80 rounded-tl-sm'
-                        } ${msg.status === 'pending' ? 'opacity-65' : ''} ${msg.status === 'failed' ? 'border-red-500 bg-red-50 text-red-900' : ''}`}
-                      >
-                        {/* Media rendering (Image/Video) */}
-                        {msg.media_url && (
-                          <div className="mb-2 max-w-xs rounded-xl overflow-hidden border border-zinc-100 dark:border-zinc-800">
-                            {msg.message_type === 'video' ? (
-                              <video src={msg.media_url} controls className="w-full h-auto object-cover max-h-48" />
-                            ) : (
-                              <img src={msg.media_url} alt="Attached Media" className="w-full h-auto object-cover max-h-48" />
+                      <div className={`flex items-center space-x-1.5 ${isOwn ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
+                        
+                        {/* Message Bubble Card */}
+                        <div className="relative group/bubble max-w-sm">
+                          <div 
+                            className={`px-4 py-2.5 rounded-2.5xl text-xs leading-normal select-text relative shadow-sm border ${
+                              isOwn 
+                                ? 'bg-primary text-white border-transparent rounded-tr-sm' 
+                                : 'bg-white dark:bg-zinc-850 text-zinc-900 dark:text-zinc-150 border-zinc-100 dark:border-zinc-800/80 rounded-tl-sm'
+                            } ${msg.status === 'pending' ? 'opacity-65' : ''} ${msg.status === 'failed' ? 'border-red-500 bg-red-50 text-red-900' : ''}`}
+                          >
+                            {/* Media rendering (Image/Video) */}
+                            {msg.media_url && (
+                              <div className="mb-2 max-w-xs rounded-xl overflow-hidden border border-zinc-100 dark:border-zinc-800">
+                                {msg.message_type === 'video' ? (
+                                  <video src={msg.media_url} controls className="w-full h-auto object-cover max-h-48" />
+                                ) : (
+                                  <img src={msg.media_url} alt="Attached Media" className="w-full h-auto object-cover max-h-48" />
+                                )}
+                              </div>
                             )}
+                            
+                            {/* Message content text */}
+                            {msg.content && <p className="whitespace-pre-wrap text-left">{msg.content}</p>}
+                            
+                            {/* Hover timestamp tooltip */}
+                            <span className="hidden group-hover/bubble:inline-block absolute -bottom-5 left-1/2 -translate-x-1/2 bg-zinc-950 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-xl shrink-0 z-30">
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
-                        )}
-                        
-                        {/* Message content text */}
-                        {msg.content && <p className="whitespace-pre-wrap text-left">{msg.content}</p>}
-                        
-                        {/* Hover timestamp tooltip */}
-                        <span className="hidden group-hover/bubble:inline-block absolute -bottom-5 left-1/2 -translate-x-1/2 bg-zinc-950 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-xl shrink-0 z-30">
-                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+
+                          {/* Emojis Reaction list overlay */}
+                          {msg.reactions && msg.reactions.length > 0 && (
+                            <div className={`absolute -bottom-2 ${isOwn ? 'left-2' : 'right-2'} flex items-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 rounded-full shadow-md space-x-0.5`}>
+                              {Array.from(new Set(msg.reactions.map((r) => r.emoji))).map((emoji) => (
+                                <span key={emoji} className="text-[10px]" title={msg.reactions.filter((r) => r.emoji === emoji).map((r) => r.username).join(', ')}>
+                                  {emoji}
+                                </span>
+                              ))}
+                              {msg.reactions.length > 1 && (
+                                <span className="text-[8px] font-bold text-zinc-400 pl-0.5">{msg.reactions.length}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Three-dot Context menu toggle */}
+                        <div className="opacity-0 group-hover:opacity-100 transition duration-150 relative">
+                          <button 
+                            onClick={() => setActiveMenuId(isMenuOpen ? null : msg.id)}
+                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200 rounded-full cursor-pointer"
+                          >
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* Dropdown Menu actions */}
+                          {isMenuOpen && (
+                            <div className={`absolute ${isOwn ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-40 py-1 w-28`}>
+                              
+                              <button
+                                onClick={() => {
+                                  setReplyingTo(msg);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-zinc-650 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-left font-bold cursor-pointer"
+                              >
+                                <Reply className="h-3.5 w-3.5 text-zinc-400" />
+                                <span>Reply</span>
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  setActiveReactionPickerId(isReactionPickerOpen ? null : msg.id);
+                                }}
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-zinc-650 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-left font-bold cursor-pointer"
+                              >
+                                <SmilePlus className="h-3.5 w-3.5 text-zinc-400" />
+                                <span>React</span>
+                              </button>
+
+                              {isOwn && msg.status !== 'pending' && (
+                                <button
+                                  onClick={() => handleDeleteMessage(msg.id)}
+                                  className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 text-left font-bold cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Emoji reaction picker bubble */}
+                          {isReactionPickerOpen && (
+                            <div className={`absolute ${isOwn ? 'right-0' : 'left-0'} -top-10 flex items-center bg-zinc-950 border border-zinc-850 px-2 py-1.5 rounded-full shadow-2xl space-x-1.5 z-40 animate-badge-pop`}>
+                              {QUICK_EMOJIS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleReactToMessage(msg.id, emoji)}
+                                  className="hover:scale-125 transition duration-100 text-xs shrink-0 cursor-pointer"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Emojis Reaction list overlay */}
-                      {msg.reactions && msg.reactions.length > 0 && (
-                        <div className={`absolute -bottom-2 ${isOwn ? 'left-2' : 'right-2'} flex items-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 rounded-full shadow-md space-x-0.5`}>
-                          {Array.from(new Set(msg.reactions.map((r) => r.emoji))).map((emoji) => (
-                            <span key={emoji} className="text-[10px]" title={msg.reactions.filter((r) => r.emoji === emoji).map((r) => r.username).join(', ')}>
-                              {emoji}
-                            </span>
-                          ))}
-                          {msg.reactions.length > 1 && (
-                            <span className="text-[8px] font-bold text-zinc-400 pl-0.5">{msg.reactions.length}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Three-dot Context menu toggle */}
-                    <div className="opacity-0 group-hover:opacity-100 transition duration-150 relative">
-                      <button 
-                        onClick={() => setActiveMenuId(isMenuOpen ? null : msg.id)}
-                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full cursor-pointer"
-                      >
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </button>
-
-                      {/* Dropdown Menu actions */}
-                      {isMenuOpen && (
-                        <div className={`absolute ${isOwn ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-40 py-1 w-28`}>
-                          
-                          <button
-                            onClick={() => {
-                              setReplyingTo(msg);
-                              setActiveMenuId(null);
-                            }}
-                            className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-zinc-650 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-left font-bold cursor-pointer"
-                          >
-                            <Reply className="h-3.5 w-3.5 text-zinc-400" />
-                            <span>Reply</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => {
-                              setActiveReactionPickerId(isReactionPickerOpen ? null : msg.id);
-                            }}
-                            className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-zinc-650 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-left font-bold cursor-pointer"
-                          >
-                            <SmilePlus className="h-3.5 w-3.5 text-zinc-400" />
-                            <span>React</span>
-                          </button>
-
-                          {isOwn && msg.status !== 'pending' && (
-                            <button
-                              onClick={() => handleDeleteMessage(msg.id)}
-                              className="w-full flex items-center space-x-2 px-3 py-2 text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 text-left font-bold cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>Delete</span>
-                            </button>
+                      {/* Read receipts checkmarks */}
+                      {isOwn && (
+                        <div className="flex items-center space-x-1 mr-1">
+                          {msg.status === 'pending' ? (
+                            <span className="h-2.5 w-2.5 border border-zinc-450 border-t-transparent rounded-full animate-spin shrink-0" title="Sending..." />
+                          ) : msg.status === 'failed' ? (
+                            <span className="text-[10px] text-red-500 font-bold" title="Tap to retry">Failed</span>
+                          ) : msg.is_read ? (
+                            <CheckCheck className="h-3 w-3 text-blue-500 stroke-[2.5]" title="Read" />
+                          ) : (
+                            <Check className="h-3 w-3 text-zinc-405" title="Sent" />
                           )}
                         </div>
                       )}
 
-                      {/* Emoji reaction picker bubble */}
-                      {isReactionPickerOpen && (
-                        <div className={`absolute ${isOwn ? 'right-0' : 'left-0'} -top-10 flex items-center bg-zinc-950 border border-zinc-850 px-2 py-1.5 rounded-full shadow-2xl space-x-1.5 z-40 animate-badge-pop`}>
-                          {QUICK_EMOJIS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              onClick={() => handleReactToMessage(msg.id, emoji)}
-                              className="hover:scale-125 transition duration-100 text-xs shrink-0 cursor-pointer"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                  </div>
-
-                  {/* Read receipts checkmarks */}
-                  {isOwn && (
-                    <div className="flex items-center space-x-1 mr-1">
-                      {msg.status === 'pending' ? (
-                        <span className="h-2.5 w-2.5 border border-zinc-450 border-t-transparent rounded-full animate-spin shrink-0" title="Sending..." />
-                      ) : msg.status === 'failed' ? (
-                        <span className="text-[10px] text-red-500 font-bold" title="Tap to retry">Failed</span>
-                      ) : msg.is_read ? (
-                        <CheckCheck className="h-3 w-3 text-blue-500 stroke-[2.5]" title="Read" />
-                      ) : (
-                        <Check className="h-3 w-3 text-zinc-405" title="Sent" />
-                      )}
-                    </div>
-                  )}
-
-                </div>
-              );
-            })}
-          </div>
-        ))}
+                  );
+                })}
+              </div>
+            ))}
+          </>
+        )}
         
         <div ref={messagesEndRef} />
       </div>

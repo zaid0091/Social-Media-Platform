@@ -9,6 +9,7 @@ import useAuthStore from '@/store/useAuthStore';
 import useUserProfile from '@/hooks/useUserProfile';
 import useUserPosts from '@/hooks/useUserPosts';
 import FollowButton from '@/components/profile/FollowButton';
+import ProfileSkeleton from '@/components/ui/ProfileSkeleton';
 import HighlightCreateModal from '@/components/stories/HighlightCreateModal';
 import HighlightEditModal from '@/components/stories/HighlightEditModal';
 import dynamic from 'next/dynamic';
@@ -198,11 +199,7 @@ export default function ProfilePage() {
   }
 
   if (!profile) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="h-8 w-8 rounded-full border-4 border-zinc-200 dark:border-zinc-800 border-t-primary animate-spin" />
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   const isSelf = profile.is_self;

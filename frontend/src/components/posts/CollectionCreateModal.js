@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { X, FolderPlus } from 'lucide-react';
 import api from '@/services/api';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 export default function CollectionCreateModal({ isOpen, onClose, onSuccess }) {
+  const modalRef = useModalAccessibility(isOpen, onClose);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,8 +33,19 @@ export default function CollectionCreateModal({ isOpen, onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 relative flex flex-col text-left">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        ref={modalRef}
+        className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 relative flex flex-col text-left"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create Collection Folder Modal"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -43,6 +56,7 @@ export default function CollectionCreateModal({ isOpen, onClose, onSuccess }) {
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-450 hover:text-zinc-700 dark:hover:text-zinc-200 transition cursor-pointer"
+            aria-label="Close creation modal"
           >
             <X className="h-4 w-4" />
           </button>

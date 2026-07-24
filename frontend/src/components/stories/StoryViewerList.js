@@ -4,11 +4,12 @@ import { useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import { X, Eye, Clock, UserCheck } from 'lucide-react';
 import api from '@/services/api';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function StoryViewerList({ storyId, isOpen, onClose }) {
-  const drawerRef = useRef(null);
+  const modalRef = useModalAccessibility(isOpen, onClose);
 
   // Fetch story viewers with pagination support
   const { data: viewerData, error, isLoading } = useSWR(
@@ -52,8 +53,11 @@ export default function StoryViewerList({ storyId, isOpen, onClose }) {
 
       {/* Drawer Body Container */}
       <div 
-        ref={drawerRef}
+        ref={modalRef}
         className="absolute bottom-0 inset-x-0 bg-zinc-950 text-white rounded-t-3xl border-t border-zinc-800/80 max-h-[60%] flex flex-col overflow-hidden shadow-2xl z-50 transform translate-y-0 transition-transform duration-300 animate-in slide-in-from-bottom duration-300"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Story Viewers List"
       >
         
         {/* Visual drag handle indicator */}
@@ -72,6 +76,7 @@ export default function StoryViewerList({ storyId, isOpen, onClose }) {
           <button 
             onClick={onClose} 
             className="p-1.5 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
+            aria-label="Close viewers list"
           >
             <X className="h-5 w-5" />
           </button>

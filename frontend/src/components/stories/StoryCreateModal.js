@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Camera, Image, Type, ChevronLeft, Send, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Type, ChevronLeft, Send, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import api from '@/services/api';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 const GRADIENTS = [
   'linear-gradient(135deg, #f59e0b, #ec4899)',
@@ -249,11 +250,24 @@ export default function StoryCreateModal({ isOpen, onClose, onStoryCreated }) {
     onClose();
   };
 
+  const modalRef = useModalAccessibility(isOpen, handleClose);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       
       {/* Modal Card container */}
-      <div className="relative w-full max-w-lg h-full sm:h-[80vh] sm:max-h-[750px] bg-zinc-950 text-white flex flex-col overflow-hidden sm:rounded-2xl border border-zinc-800 shadow-2xl">
+      <div 
+        ref={modalRef}
+        className="relative w-full max-w-lg h-full sm:h-[80vh] sm:max-h-[750px] bg-zinc-950 text-white flex flex-col overflow-hidden sm:rounded-2xl border border-zinc-800 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create Story Modal"
+      >
         
         {/* Header */}
         <header className="p-4 border-b border-zinc-850 flex items-center justify-between shrink-0 bg-zinc-900/40">

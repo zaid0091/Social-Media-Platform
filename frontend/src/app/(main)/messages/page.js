@@ -9,6 +9,7 @@ import useMessages from '@/hooks/useMessages';
 import useConversations from '@/hooks/useConversations';
 import NewConversationModal from '@/components/messaging/NewConversationModal';
 import ChatWindow from '@/components/messaging/ChatWindow';
+import MessageSkeleton from '@/components/ui/MessageSkeleton';
 
 function MessagesClient() {
   const router = useRouter();
@@ -158,9 +159,10 @@ function MessagesClient() {
         {/* Conversations Scroll pane */}
         <div className="flex-1 overflow-y-auto p-2">
           {isLoading && conversationsList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 space-y-2">
-              <div className="h-6 w-6 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" />
-              <p className="text-[10px] text-zinc-400 font-bold">Loading chats...</p>
+            <div className="space-y-1">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <MessageSkeleton key={i} />
+              ))}
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center px-4">

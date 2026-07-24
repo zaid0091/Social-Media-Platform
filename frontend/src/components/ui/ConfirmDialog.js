@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 export default function ConfirmDialog({
   isOpen,
@@ -14,10 +15,16 @@ export default function ConfirmDialog({
   isDangerous = false,
   isLoading = false
 }) {
+  const modalRef = useModalAccessibility(isOpen, onCancel);
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm transition-opacity"
@@ -25,7 +32,13 @@ export default function ConfirmDialog({
       />
       
       {/* Dialog container */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-sm w-full p-6 shadow-xl relative z-10 text-left animate-in fade-in zoom-in-95 duration-200">
+      <div 
+        ref={modalRef}
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-sm w-full p-6 shadow-xl relative z-10 text-left animate-in fade-in zoom-in-95 duration-200"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title || "Confirm Action"}
+      >
         <div className="flex items-start space-x-3.5">
           {isDangerous && (
             <div className="p-2.5 bg-red-50 dark:bg-red-950/30 rounded-2xl text-red-500 shrink-0">

@@ -124,6 +124,22 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowRight') {
+        handleNext();
+      } else if (e.key === 'ArrowLeft') {
+        handlePrev();
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [storyIndex, groupIndex, groups]);
+
   const handleVideoLoaded = () => {
     if (videoRef.current) {
       setVideoDuration(videoRef.current.duration || 5);

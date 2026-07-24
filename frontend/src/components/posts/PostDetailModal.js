@@ -12,10 +12,12 @@ import CarouselComponent from '@/components/posts/CarouselComponent';
 import VideoPlayer from '@/components/posts/VideoPlayer';
 import CommentItem from '@/components/posts/CommentItem';
 import CommentInput from '@/components/posts/CommentInput';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
 export default function PostDetailModal({ postId, isOpen, onClose }) {
+  const modalRef = useModalAccessibility(isOpen, onClose);
   const { user: currentUser } = useAuthStore();
   
   const [commentText, setCommentText] = useState('');
@@ -186,10 +188,21 @@ export default function PostDetailModal({ postId, isOpen, onClose }) {
   const isVideo = hasMedia && mediaList[0].media_type === 'video';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       
       {/* MODAL MAIN BOX */}
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-5xl h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row relative animate-scale-up">
+      <div 
+        ref={modalRef}
+        className="bg-white dark:bg-zinc-900 w-full max-w-5xl h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row relative animate-scale-up"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Post details modal"
+      >
         
         {/* CLOSE BUTTON */}
         <button 

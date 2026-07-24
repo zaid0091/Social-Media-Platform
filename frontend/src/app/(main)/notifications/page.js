@@ -7,6 +7,7 @@ import useNotificationStore from '@/store/useNotificationStore';
 import useNotificationsQuery from '@/hooks/useNotificationsQuery';
 import NotificationItem from '@/components/notifications/NotificationItem';
 import FlatList from '@/components/ui/FlatList';
+import NotificationSkeleton from '@/components/ui/NotificationSkeleton';
 
 export default function NotificationsPage() {
   const { 
@@ -105,6 +106,13 @@ export default function NotificationsPage() {
           error={error}
           refetch={refetch}
           className="space-y-3"
+          ListFooterComponent={
+            (isLoading || isFetchingNextPage) && (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => <NotificationSkeleton key={i} />)}
+              </div>
+            )
+          }
           ListEmptyComponent={
             <div className="flex flex-col items-center justify-center py-24 text-center space-y-4 w-full">
               <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center border border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500">

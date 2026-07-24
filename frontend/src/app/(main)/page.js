@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
 import PostCard from '@/components/posts/PostCard';
-import SkeletonPostCard from '@/components/posts/SkeletonPostCard';
+import PostCardSkeleton from '@/components/ui/PostCardSkeleton';
 import StoriesBar from '@/components/stories/StoriesBar';
 import { ArrowUp, RefreshCw, Compass, Users } from 'lucide-react';
 import Link from 'next/link';
@@ -129,7 +129,7 @@ export default function HomeFeedPage() {
         ListFooterComponent={
           <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800 w-full">
             {[1, 2].map((i) => (
-              <SkeletonPostCard key={i} />
+              <PostCardSkeleton key={i} />
             ))}
           </div>
         }

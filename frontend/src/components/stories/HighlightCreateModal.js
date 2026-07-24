@@ -4,6 +4,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { X, Check, Search, Calendar, FolderHeart } from 'lucide-react';
 import api from '@/services/api';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 const fetcher = (url) => api.get(url).then((res) => res.data);
 
@@ -12,6 +13,15 @@ export default function HighlightCreateModal({ isOpen, onClose, onHighlightCreat
   const [selectedStoryIds, setSelectedStoryIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const handleClose = () => {
+    setTitle('');
+    setSelectedStoryIds([]);
+    setError('');
+    onClose();
+  };
+
+  const modalRef = useModalAccessibility(isOpen, handleClose);
 
   // Fetch all stories created by the user (archive)
   const { data: archive = [], error: archiveError, isLoading } = useSWR(
@@ -64,20 +74,22 @@ export default function HighlightCreateModal({ isOpen, onClose, onHighlightCreat
     }
   };
 
-  const handleClose = () => {
-    setTitle('');
-    setSelectedStoryIds([]);
-    setError('');
-    onClose();
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       
       {/* Modal card */}
       <form 
         onSubmit={handleSubmit}
+        ref={modalRef}
         className="relative w-full max-w-md h-full sm:h-[80vh] sm:max-h-[600px] bg-zinc-950 text-white flex flex-col overflow-hidden sm:rounded-2xl border border-zinc-800 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="New Highlight Modal"
       >
         
         {/* Header */}

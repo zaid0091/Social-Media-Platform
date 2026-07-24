@@ -22,6 +22,7 @@ import useAuthStore from '@/store/useAuthStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { postKeys } from '@/utils/queryKeys';
 import MentionDropdown from './MentionDropdown';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 const ImageCropper = dynamic(() => import('./ImageCropper'), {
   ssr: false,
@@ -32,6 +33,7 @@ export default function PostCreateModal() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuthStore();
   const { isPostCreateOpen, closePostCreate } = useUIStore();
+  const modalRef = useModalAccessibility(isPostCreateOpen, closePostCreate);
   const [step, setStep] = useState(1); // 1: Media Selection, 2: Edit/Reorder, 3: Details
   
   // Files states
@@ -395,9 +397,20 @@ export default function PostCreateModal() {
   if (!isPostCreateOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div 
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closePostCreate();
+      }}
+    >
       {/* Main modal card container */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[85vh]">
+      <div 
+        ref={modalRef}
+        className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[85vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create Post Modal"
+      >
         {/* Navigation / Header */}
         <div className="px-6 py-4 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">

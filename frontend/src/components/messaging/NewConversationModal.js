@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Search, X, MessageSquare, ArrowRight } from 'lucide-react';
 import api from '@/services/api';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 export default function NewConversationModal({ isOpen, onClose, onSelectConversation }) {
+  const modalRef = useModalAccessibility(isOpen, onClose);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -60,10 +62,16 @@ export default function NewConversationModal({ isOpen, onClose, onSelectConversa
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div 
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       
       {/* Modal Card */}
       <div 
+        ref={modalRef}
         className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-badge-pop"
         role="dialog"
         aria-modal="true"

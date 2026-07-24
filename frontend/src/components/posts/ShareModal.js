@@ -13,8 +13,10 @@ import {
 } from 'lucide-react';
 import api from '@/services/api';
 import useAuthStore from '@/store/useAuthStore';
+import useModalAccessibility from '@/hooks/useModalAccessibility';
 
 export default function ShareModal({ isOpen, post, onClose, onShareSuccess }) {
+  const modalRef = useModalAccessibility(true, onClose);
   const [copied, setCopied] = useState(false);
   const [sharingStory, setSharingStory] = useState(false);
   const [storySuccess, setStorySuccess] = useState(false);
@@ -108,8 +110,19 @@ export default function ShareModal({ isOpen, post, onClose, onShareSuccess }) {
   const whatsappShareUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Check out this post: ${postUrl}`)}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-5 relative flex flex-col text-left">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        ref={modalRef}
+        className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-5 relative flex flex-col text-left"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Share Post Options"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
@@ -120,6 +133,7 @@ export default function ShareModal({ isOpen, post, onClose, onShareSuccess }) {
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-450 hover:text-zinc-700 dark:hover:text-zinc-200 transition cursor-pointer"
+            aria-label="Close share modal"
           >
             <X className="h-4.5 w-4.5" />
           </button>
