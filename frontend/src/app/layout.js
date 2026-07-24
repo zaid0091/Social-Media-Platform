@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import AuthInitializer from "@/components/AuthInitializer";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import QueryProvider from "@/components/QueryProvider";
+import { I18nProvider } from "@/i18n/I18nContext";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -43,12 +44,14 @@ export default function RootLayout({ children }) {
     >
       <body className="min-h-full flex flex-col bg-light-bg text-foreground dark:bg-dark-bg transition-colors duration-200">
         <ThemeProvider>
-          <QueryProvider>
-            <AuthInitializer>
-              {children}
-              <Toaster position="bottom-right" theme="dark" closeButton />
-            </AuthInitializer>
-          </QueryProvider>
+          <I18nProvider>
+            <QueryProvider>
+              <AuthInitializer>
+                {children}
+                <Toaster position="bottom-right" theme="dark" closeButton />
+              </AuthInitializer>
+            </QueryProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>
