@@ -20,11 +20,18 @@ export const metadata = {
   description: "A premium, state-of-the-art social media platform featuring real-time feeds, direct messaging, live presence tracking, and rich media sharing.",
   keywords: ["social media", "real-time", "chat", "feed", "connect", "messaging"],
   authors: [{ name: "Social Media Team" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "SocialApp",
+  },
 };
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#7c3aed",
 };
 
 export default function RootLayout({ children }) {

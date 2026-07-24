@@ -52,6 +52,22 @@ export default function MainLayout({ children }) {
       const goOffline = () => setIsOnline(false);
       window.addEventListener('online', goOnline);
       window.addEventListener('offline', goOffline);
+
+      // Register PWA service worker on page load
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(
+          (reg) => console.log('PWA ServiceWorker scope:', reg.scope),
+          (err) => console.error('PWA ServiceWorker failed:', err)
+        );
+      }
+
+      // Query push notification permission
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then((perm) => {
+          console.log('Notification permission status:', perm);
+        });
+      }
+
       return () => {
         window.removeEventListener('online', goOnline);
         window.removeEventListener('offline', goOffline);
