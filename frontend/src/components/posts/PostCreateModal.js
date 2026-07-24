@@ -398,7 +398,7 @@ export default function PostCreateModal() {
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) closePostCreate();
       }}
@@ -406,7 +406,7 @@ export default function PostCreateModal() {
       {/* Main modal card container */}
       <div 
         ref={modalRef}
-        className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[85vh]"
+        className="bg-white dark:bg-zinc-900 rounded-none sm:rounded-3xl w-full sm:max-w-lg overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col h-full sm:h-auto sm:max-h-[85vh]"
         role="dialog"
         aria-modal="true"
         aria-label="Create Post Modal"

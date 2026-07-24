@@ -66,21 +66,21 @@ export default function ReportModal({ isOpen, onClose, targetType, targetId }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm transition-opacity"
+        className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm transition-opacity hidden sm:block"
         onClick={onClose}
       />
 
       {/* Modal Container */}
       <div 
         ref={modalRef}
-        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-md w-full shadow-2xl relative z-10 overflow-hidden text-left flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-none sm:rounded-3xl max-w-md w-full shadow-2xl relative z-10 overflow-hidden text-left flex flex-col h-full sm:h-auto sm:max-h-[90vh] animate-in fade-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-label={`Report ${targetType || 'Content'}`}

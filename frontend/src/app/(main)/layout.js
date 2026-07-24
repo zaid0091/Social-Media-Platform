@@ -60,6 +60,46 @@ export default function MainLayout({ children }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    const handleTouchStart = (e) => {
+      const touch = e.touches[0];
+      // Only initiate swipe back if swipe originates from left edge
+      if (touch.clientX < 40) {
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+      } else {
+        touchStartX = 0;
+        touchStartY = 0;
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      if (touchStartX === 0) return;
+      const touch = e.changedTouches[0];
+      const diffX = touch.clientX - touchStartX;
+      const diffY = touch.clientY - touchStartY;
+
+      // Swipe right (> 120px) horizontally with minimal vertical deflection
+      if (diffX > 120 && Math.abs(diffY) < 60) {
+        router.back();
+      }
+      touchStartX = 0;
+      touchStartY = 0;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [router]);
+
+  useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     }

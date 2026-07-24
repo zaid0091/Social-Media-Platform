@@ -661,7 +661,7 @@ export default function ChatWindow({ conversationId, onGoBack }) {
       </div>
 
       {/* 3. INPUT BAR PANEL */}
-      <footer className="p-3.5 border-t border-zinc-150 dark:border-zinc-850 bg-white dark:bg-zinc-900 shrink-0 z-20">
+      <footer className="p-3.5 pb-safe border-t border-zinc-150 dark:border-zinc-850 bg-white dark:bg-zinc-900 shrink-0 z-20">
         <form onSubmit={handleSendMessage} className="space-y-2">
           
           {/* Replying-to Preview Bar */}

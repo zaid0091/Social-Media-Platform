@@ -13,6 +13,7 @@ import useFeedQuery from '@/hooks/useFeedQuery';
 import { postKeys } from '@/utils/queryKeys';
 import FlatList from '@/components/ui/FlatList';
 import OptimizedImage from '@/components/ui/OptimizedImage';
+import PullToRefresh from '@/components/ui/PullToRefresh';
 
 export default function HomeFeedPage() {
   const { user: currentUser, accessToken } = useAuthStore();
@@ -85,8 +86,9 @@ export default function HomeFeedPage() {
   });
 
   return (
-    <div className="flex flex-col min-h-screen relative">
-      {/* 1. Sticky page header */}
+    <PullToRefresh onRefresh={refetch}>
+      <div className="flex flex-col min-h-screen relative bg-white dark:bg-zinc-900">
+        {/* 1. Sticky page header */}
       <header className="sticky top-0 z-10 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">Home</h1>
       </header>
@@ -196,5 +198,6 @@ export default function HomeFeedPage() {
         }
       />
     </div>
+    </PullToRefresh>
   );
 }

@@ -34,14 +34,14 @@ export default function CollectionCreateModal({ isOpen, onClose, onSuccess }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div 
         ref={modalRef}
-        className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 relative flex flex-col text-left"
+        className="bg-white dark:bg-zinc-900 w-full sm:max-w-sm rounded-none sm:rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 relative flex flex-col text-left h-full sm:h-auto"
         role="dialog"
         aria-modal="true"
         aria-label="Create Collection Folder Modal"

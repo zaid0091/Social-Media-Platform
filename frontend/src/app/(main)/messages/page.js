@@ -121,11 +121,11 @@ function MessagesClient() {
   };
 
   return (
-    <div className="flex-1 flex min-h-screen relative overflow-hidden bg-white dark:bg-zinc-900">
+    <div className="flex-1 flex h-[calc(100dvh-4rem)] md:h-[calc(100vh-0rem)] relative overflow-hidden bg-white dark:bg-zinc-900">
       
       {/* LEFT COLUMN: Conversation List */}
       <div 
-        className={`w-full md:w-80 xl:w-96 border-r border-zinc-200 dark:border-zinc-800 flex-shrink-0 flex flex-col h-screen md:h-auto ${
+        className={`w-full md:w-80 xl:w-96 border-r border-zinc-200 dark:border-zinc-800 flex-shrink-0 flex flex-col h-full ${
           activeConversationId ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -252,7 +252,7 @@ function MessagesClient() {
 
       {/* RIGHT COLUMN: Active Chat Panel (Detail) */}
       <div 
-        className={`flex-1 flex flex-col h-screen md:h-auto ${
+        className={`flex-1 flex flex-col h-full ${
           activeConversationId ? 'flex' : 'hidden md:flex bg-zinc-50/50 dark:bg-zinc-950/20'
         }`}
       >

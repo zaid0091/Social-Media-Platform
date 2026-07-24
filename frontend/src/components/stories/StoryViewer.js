@@ -188,22 +188,41 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
     }
   };
 
+  const touchStartX = useRef(null);
   const touchStartY = useRef(null);
 
   const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     setIsPaused(true);
   };
 
   const handleTouchEnd = (e) => {
     setIsPaused(false);
-    if (touchStartY.current !== null) {
+    if (touchStartX.current !== null && touchStartY.current !== null) {
+      const touchEndX = e.changedTouches[0].clientX;
       const touchEndY = e.changedTouches[0].clientY;
+      const diffX = touchStartX.current - touchEndX;
       const diffY = touchStartY.current - touchEndY;
-      if (isOwnStory && diffY > 80) {
-        setIsPaused(true);
-        setIsViewerListOpen(true);
+
+      // Determine major swipe axis
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        // Horizontal swipe: threshold of 60px
+        if (diffX > 60) {
+          handleNext();
+        } else if (diffX < -60) {
+          handlePrev();
+        }
+      } else {
+        // Vertical swipe
+        if (isOwnStory && diffY > 80) {
+          setIsPaused(true);
+          setIsViewerListOpen(true);
+        } else if (diffY < -80) {
+          onClose();
+        }
       }
+      touchStartX.current = null;
       touchStartY.current = null;
     }
   };
@@ -227,7 +246,11 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
       <div className="relative w-full max-w-md h-full sm:h-[90vh] sm:rounded-2xl overflow-hidden bg-zinc-950 flex flex-col justify-between shadow-2xl">
         
         {/* Tap areas overlay */}
-        <div className="absolute inset-0 z-20 flex">
+        <div 
+          className="absolute inset-0 z-20 flex"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {/* Left tap area (navigate backward) */}
           <div 
             onClick={handlePrev}
@@ -237,8 +260,6 @@ export default function StoryViewer({ groups = [], initialGroupIndex = 0, onClos
           <div 
             onMouseDown={() => setIsPaused(true)}
             onMouseUp={() => setIsPaused(false)}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
             className="w-1/3 h-full"
           />
           {/* Right tap area (navigate forward) */}

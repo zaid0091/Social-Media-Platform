@@ -63,7 +63,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectConversa
 
   return (
     <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-0 sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -72,7 +72,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectConversa
       {/* Modal Card */}
       <div 
         ref={modalRef}
-        className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-badge-pop"
+        className="w-full sm:max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-none sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col h-full sm:h-auto sm:max-h-[85vh] animate-badge-pop"
         role="dialog"
         aria-modal="true"
         aria-label="New Message Search Modal"
