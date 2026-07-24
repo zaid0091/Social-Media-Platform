@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /explore
+Allow: /discover
+Allow: /posts/
+Allow: /hashtag/
+Disallow: /messages
+Disallow: /notifications
+Disallow: /bookmarks
+Disallow: /settings
+Disallow: /follow-requests
+
+Sitemap: https://socialapp.com/sitemap.xml
